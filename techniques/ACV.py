@@ -5,6 +5,7 @@ import pyqtgraph as pg
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QFileDialog, QLabel
 import numpy as np
+import techniques.dataprocess as dp
 
 
 class ACV:
@@ -36,10 +37,13 @@ class ACV:
         self.Sensitivity = int(lines[15].split("=")[1].replace("1e-", ""))
 
         x, y = [], []
+        self.xToy = {}
         for i in range(19, self.num):
             item = lines[i].split(",")
-            x.append(round(float(item[0]), 4))
-            y.append(round(float(item[1]) * math.pow(10, self.Sensitivity), 4))
+            curX, curY = round(float(item[0]), 4), round(float(item[1]) * math.pow(10, self.Sensitivity), 4)
+            self.xToy[curX] = curY
+            x.append(curX)
+            y.append(curY)
 
         imax = max(y)
 
@@ -72,11 +76,24 @@ class ACV:
         self.plotWidget.setLabel('left', "AC Current/1e-{}A".format(self.Sensitivity), **styles)
         self.plotWidget.setLabel('bottom', "Potential/V", **styles)
         self.plotWidget.setBackground("w")
+        self.plotWidget.addLegend()
 
         self.plotWidget.showGrid(x=True, y=True)
-        self.plotWidget.plot(x, y, pen=pen)
+        self.mainPlotData = self.plotWidget.plot(x, y, pen=pen, name='当前数据')  # 绘制主曲线
+        self.mainPlotData.setSymbolSize(8)
 
+        blue_pen = pg.mkPen(color='b', width=2)
+        # p_x, p_y = fit(x, y)
+        # self.plotWidget.plot(p_x, p_y, pen=new_pen)
+        self.plotWidget.plot(x, dp.cal_integral(x, y), pen=blue_pen)
 
+        gree_pen = pg.mkPen(color='g', width=2)
+        x_interp, y_interp = dp.interpolate(x, y, 2)
+        # self.plotWidget.plot(x_interp, y_interp, pen=gree_pen)
 
-
-
+    def showDataPoint(self, flag: bool):
+        # 显示/隐藏原始数据点
+        if flag:
+            self.mainPlotData.setSymbol('o')
+        else:
+            self.mainPlotData.setSymbol(None)

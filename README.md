@@ -44,4 +44,26 @@ event：注意mousemoveevent：
 
 [10.5 QStackedLayout堆叠布局管理器](https://www.cnblogs.com/yuyingblogs/p/16164631.html)
 
-![image-20221130213752990](C:\Users\82526\AppData\Roaming\Typora\typora-user-images\image-20221130213752990.png)
+
+
+数据处理：
+
+[numpy中的polyfit](https://blog.csdn.net/qq_45804132/article/details/104744632)：polyfit和poly1d
+
+[Numpy.linalg模块的lstsq()进行线性回归拟合(数学建模）](https://blog.csdn.net/weixin_45870904/article/details/111397520)：线性回归，拟合
+
+[python 数据、曲线平滑处理——方法总结(Savitzky-Golay 滤波器、make_interp_spline插值法和convolve滑动平均滤波)](https://blog.csdn.net/weixin_42782150/article/details/107176500)：写了四种平滑的方法
+
+🎈🎈🎈[python 计算离散点的微分和积分(超详细)](https://blog.csdn.net/goodCodeVsBadBs/article/details/108270333)：
+
+
+
+
+
+[纯Python实现：函数求导切线图、求偏导、梯度下降法（4）](https://blog.csdn.net/QLBFA/article/details/107558464)：自行实现求偏导的算法，mark一下， 论文中可以写
+
+[Matlab如何求离散点的导数](https://blog.csdn.net/qq_43080446/article/details/108542357)：中心差分（梯度）和向前差分
+
+Savitzky-Golay 滤波器：https://blog.csdn.net/weixin_43821212/article/details/100016021。可以写在论文当中
+
+b-spline：b样条基函数，用来实现插值。[深入理解贝塞尔曲线](https://juejin.cn/post/6844903666361565191)
