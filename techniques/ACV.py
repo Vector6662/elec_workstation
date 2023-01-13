@@ -6,12 +6,26 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QFileDialog, QLabel
 import numpy as np
 import techniques.dataprocess as dp
+from gui.another_window import DerivativeWidget
+
+
+class AbstractTechnique:
+    def __init__(self, parent, file_name, file_type):
+        if file_name is None or len(file_name) == 0:
+            TypeError('error when open file.')
+            return
+        with open(file_name, "r") as f:  # 返回文件对象
+            data = f.read()
+        f.close()
+        lines = data.splitlines()
+        technique = lines[1]  # 测试技术
 
 
 class ACV:
     def __init__(self, parent, file_name, file_type):
         if len(file_name) == 0:
             return
+        self.parent = parent
         # open()会自动返回一个文件对象
         f = open(file_name, "r")  # 打开路径所对应的文件， "r"以只读的方式 也是默认的方式
         with f:
@@ -44,6 +58,7 @@ class ACV:
             self.xToy[curX] = curY
             x.append(curX)
             y.append(curY)
+        self.x, self.y = x, y
 
         imax = max(y)
 
@@ -58,15 +73,9 @@ class ACV:
 
         # widgets
         # 如果后续代码有问题，考虑构造器传入parent参数
-        self.plotWidget = pg.PlotWidget()
-        self.posWidget = QLabel()
-        self.textWidget = QLabel()
-
-        # self.plotItem.addItem(self.textItem)
-        # self.plotItem.addItem(self.posItem)
-        # self.graphicWidget.addItem(self.textItem, 0, 1)
-        # self.graphicWidget.addItem(self.plotWidget, 1, 0)
-        # self.graphicWidget.addItem(self.posItem, 2, 0)
+        self.plotWidget = pg.PlotWidget()  # 曲线展示
+        self.textWidget = QLabel()  # 曲线信息。实验参数显示
+        self.posWidget = QLabel()  # 展示坐标
 
         self.textWidget.setText(text)
         self.textWidget.setFixedSize(300, 700)
@@ -79,16 +88,16 @@ class ACV:
         self.plotWidget.addLegend()
 
         self.plotWidget.showGrid(x=True, y=True)
-        self.mainPlotData = self.plotWidget.plot(x, y, pen=pen, name='当前数据')  # 绘制主曲线
+        self.mainPlotData = self.plotWidget.plot(x, y, pen=pen, name='当前波形')  # 绘制主曲线
         self.mainPlotData.setSymbolSize(8)
 
-        blue_pen = pg.mkPen(color='b', width=2)
+        # blue_pen = pg.mkPen(color='b', width=2)
         # p_x, p_y = fit(x, y)
         # self.plotWidget.plot(p_x, p_y, pen=new_pen)
-        self.plotWidget.plot(x, dp.cal_integral(x, y), pen=blue_pen)
+        # self.plotWidget.plot(x, dp.integrate(x, y), pen=blue_pen)
 
-        gree_pen = pg.mkPen(color='g', width=2)
-        x_interp, y_interp = dp.interpolate(x, y, 2)
+        # gree_pen = pg.mkPen(color='g', width=2)
+        # x_interp, y_interp = dp.interpolate(x, y, 2)
         # self.plotWidget.plot(x_interp, y_interp, pen=gree_pen)
 
     def showDataPoint(self, flag: bool):
@@ -97,3 +106,44 @@ class ACV:
             self.mainPlotData.setSymbol('o')
         else:
             self.mainPlotData.setSymbol(None)
+
+    def smooth(self, window_length, polyorder, name):
+        x, y = self.x, dp.smooth(self.x, self.y, window_length, polyorder)
+        self.plotWidget.plot(x, y, name=name, pen=pg.mkPen(width=2, color=(1, 2, 3)))
+
+    def n_derivative(self, deg: int):
+        x, y = self.x, dp.n_derivative(self.x, self.y, deg)
+        self.plotWidget.plot(x, y, name='{}rd Order Derivative'.format(deg), pen=pg.mkPen(width=2))
+
+    def integrate(self, name: str):
+        if name == 'trapezoid':
+            x, y = self.x, dp.integrate_trapezoid(self.x, self.y)
+        elif name == 'simpson':
+            x, y = self.x, dp.integrate_simpson(self.x, self.y)
+        else:
+            raise ValueError("no such integrate type. should be trapezoid or simpson.")
+        self.plotWidget.plot(x, y, name=name, pen=pg.mkPen(width=2, cosmetic=True))
+
+    def interpolate(self, density: int):
+        x, y = dp.interpolate(self.x, self.y, density)
+        self.plotWidget.plot(x, y, name='B-Spline插值', pen=pg.mkPen(width=2))
+
+    def baseline_fit(self, deg, algorithm, difference: bool):
+        """
+
+        :param deg: 拟合阶数
+        :param algorithm: 拟合算法
+        :param difference: 显示差值与否
+        :return:
+        """
+        if algorithm == '普通最小二乘':
+            x, y = dp.lsq_fit(self.x, self.y, deg)
+        elif algorithm == '多项式最小二乘':
+            x, y = dp.ols_fit(self.x, self.y)
+        else:
+            raise ValueError("不存在此类拟合算法")
+        if difference:
+            # todo 显示与原数据之差
+            pass
+        self.plotWidget.plot(x, y, name=algorithm + '({}阶)'.format(deg), pen=pg.mkPen(width=2, color=(100, 0, 0)))
+

@@ -20,6 +20,10 @@ QPushButton#InitButton {
 QLabel#ErrInfo {
     font-size:25px;
 }
+QLabel#Title1 {
+    font-size:25px;
+    font:bold;
+}
 '''
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

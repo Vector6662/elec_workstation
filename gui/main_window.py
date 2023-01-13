@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QWidget, QMdiArea, QMdiSubWindow, QTextEdit, QFileDialog, QHBoxLayout, QGridLayout, QToolBar, QCheckBox,
     QPushButton, QDialog
 )
-from PyQt5.QtGui import QIcon, QColor, QPalette, QFont
+from PyQt5.QtGui import QIcon, QColor, QPalette, QFont, QKeySequence
 
 import PyQt5
 import pyqtgraph as pg
@@ -12,14 +12,17 @@ import numpy as np
 from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 
 import gui.handlers as handlers
-from gui.another_window import DataModifyWindow, ErrorOnNewLab
+from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
+    InterpolateWidget, BaselineFitWidget
 from techniques.ACV import ACV
+import techniques.dataprocess as dp
 
 
 class MainWindow(QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
+        self.errInfoWidget = ErrorInfoWidget()  # 暂时错误信息
         self.actions = {}
         self.acv = None
         self.plotMark = None  # 显示鼠标所在坐标点
@@ -47,12 +50,10 @@ class MainWindow(QMainWindow):
         initWidget.setAutoFillBackground(True)
         initLayout = QGridLayout()
         initWidget.setLayout(initLayout)
-        # font = QFont("Roman times", 20, QFont.Bold)
-        openFileWidget = QPushButton("打开文件", self, objectName="InitButton")
-        # openFileWidget.setFont(font)
-        openFileWidget.clicked.connect(self.onOpenfile)
-        newLabWidget = QPushButton("开始实验", self, objectName="InitButton")
-        # newLabWidget.setFont(font)
+        # 初始情况下按钮，打开文件和开始实验
+        openFileWidget = QPushButton("打开文件(Ctrl+O)", self, objectName="InitButton")
+        openFileWidget.clicked.connect(self.onOpenfile)  # button似乎没法绑定action，智能通过connect方式绑定handler
+        newLabWidget = QPushButton("开始实验(Ctrl+N)", self, objectName="InitButton")
         newLabWidget.clicked.connect(self.onNew)
 
         initLayout.addWidget(openFileWidget, 1, 1)
@@ -78,23 +79,20 @@ class MainWindow(QMainWindow):
             'action_terminate_exper': ['icons/pause.svg', '终止实验', 'terminate', False, self.onTerminateExper],
             'action_reverse_scan': ['icons/reversescan.svg', '反向扫描', 'reverse scan', False, self.onReverseScan],
             'action_zero_current': ['icons/zerocurrent.svg', 'Zero Current', 'Zero Current', False, self.onZeroCurrent],
-            'action_dp_smooth': ['', '数据平滑', 'Smoothing', False, self.onDataProcess],  # 平滑
-            'action_dp_deriv': ['', '导数', 'Derivatives', False, self.onDataProcess],  # 导数
-            'action_dp_integrate': ['', '积分', 'Integration', False, self.onDataProcess],  # 积分
-            'action_dp_semi': ['', '半微分和半积分', 'Semiinteg and Semideriv', False, self.onDataProcess],  # 半微分和半积分
-            'action_dp_interpolate': ['', '插值', 'Interpolation', False, self.onDataProcess],  # 插值
-            'action_dp_baseline_fitting': ['', '基线拟合和扣除', 'Baseline Fitting & Subtraction', False,
-                                           self.onDataProcess],  # 基线拟合和扣除
-            'action_dp_baseline_correction': ['', '线性基线修正', 'Linear Baseline Correction', False,
-                                              self.onDataProcess],  # 线性基线修正
-            'action_dp_datapoint_remove': ['', '数据点移除', 'Data Point Removing', False, self.onDataProcess],  # 数据点移除
-            'action_dp_datapoint_modify': ['', '数据点修改', 'Data Point Modifying', False, self.onDataProcess],
-            # 数据点修改
-            'action_dp_backgroud_substract': ['', '背景扣除', 'Background Subtraction', False, self.onDataProcess],
-            # 背景扣除
-            'action_dp_signal_avg': ['', '信号平均', 'Signal Averaging', False, self.onDataProcess],  # 信号平均
-            'action_dp_math_ops': ['', '数学运算', 'Mathematical Operation', False, self.onDataProcess],  # 数学运算
-            'action_dp_fourier_spectrum': ['', '傅里叶频谱', 'Fourier Spectrum', False, self.onDataProcess],  # 傅里叶频谱
+            'action_dp_smooth': ['', '数据平滑', 'Smoothing', False, None],  # 平滑
+            'action_dp_deriv': ['', '导数', 'Derivatives', False, None],  # 导数
+            'action_dp_integrate': ['', '积分', 'Integration', False, None],  # 积分
+            'action_dp_semi': ['', '半微分和半积分', 'Semiinteg and Semideriv', False, None],  # 半微分和半积分
+            'action_dp_interpolate': ['', '插值', 'Interpolation', False, None],  # 插值
+            'action_dp_baseline_fitting': ['', '基线拟合和扣除', 'Baseline Fitting & Subtraction', False, None],  # 基线拟合和扣除
+
+            'action_dp_baseline_correction': ['', '线性基线修正', 'Linear Baseline Correction', False, None],  # 线性基线修正
+            'action_dp_datapoint_remove': ['', '数据点移除', 'Data Point Removing', False, None],  # 数据点移除
+            'action_dp_datapoint_modify': ['', '数据点修改', 'Data Point Modifying', False, None],  # 数据点修改
+            'action_dp_backgroud_substract': ['', '背景扣除', 'Background Subtraction', False, None],  # 背景扣除
+            'action_dp_signal_avg': ['', '信号平均', 'Signal Averaging', False, None],  # 信号平均
+            'action_dp_math_ops': ['', '数学运算', 'Mathematical Operation', False, None],  # 数学运算
+            'action_dp_fourier_spectrum': ['', '傅里叶频谱', 'Fourier Spectrum', False, None],  # 傅里叶频谱
 
         }
         self.actions = {}
@@ -103,8 +101,12 @@ class MainWindow(QMainWindow):
             action = QAction(QIcon(value[0]), value[1], self)
             action.setStatusTip(value[2])
             action.setCheckable(value[3])
-            action.triggered.connect(value[4])
+            if value[4] is not None:
+                action.triggered.connect(value[4])
             self.actions[key] = action
+        # 为打开文件和新建实验设置快捷键
+        self.actions['action_openfile'].setShortcut('Ctrl+O')
+        self.actions['action_new'].setShortcut('Ctrl+N')
 
     def initMenu(self):
         menu = self.menuBar()
@@ -130,11 +132,13 @@ class MainWindow(QMainWindow):
         # graphic
         graphic_menu = menu.addMenu("图像(&G)")
 
-        # data
+        # data process
         data_menu = menu.addMenu("数据处理(&D)")
+        data_menu.triggered.connect(self.onDataProcess)
         for action in self.actions:
             if "action_dp" in action:
                 data_menu.addAction(self.actions[action])
+        self.dpWidgets = self.initDataProcess()  # 数据处理action点击后的弹出窗口
 
         # analyse
         analyse_menu = menu.addMenu("分析")
@@ -211,7 +215,7 @@ class MainWindow(QMainWindow):
 
     def onNew(self):
         # 新建
-        self.errOnNewLab = ErrorOnNewLab()
+        self.errInfoWidget.showInfo("can not open com port!")
 
     def onOpenfile(self):
         file_name, file_type = QFileDialog.getOpenFileName(self, "选取目录", "./", "Files (*.txt *.bin)")
@@ -224,16 +228,16 @@ class MainWindow(QMainWindow):
         self.acv.plotWidget.scene().sigMouseClicked.connect(self.onMouseClicked)
 
         layout = QGridLayout()
-        rightLayout = QVBoxLayout()  # 主界面右边的
+        rightLayout = QVBoxLayout()  # 主界面右侧，展示实验参数
         rightLayout.addWidget(self.acv.textWidget)
 
         layout.addLayout(rightLayout, 0, 1)
         showPointsWidget = QCheckBox("显示数据点")  # 显示数据点
+        showPointsWidget.stateChanged.connect(self.onStateChanged)  # 显示/隐藏离散数据点
         rightLayout.addWidget(showPointsWidget)
-        showPointsWidget.stateChanged.connect(self.onStateChanged)
 
-        layout.addWidget(self.acv.plotWidget, 0, 0)
-        layout.addWidget(self.acv.posWidget, 1, 0)
+        layout.addWidget(self.acv.plotWidget, 0, 0)  # 曲线可视化
+        layout.addWidget(self.acv.posWidget, 1, 0)  # 坐标实时显示
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -255,6 +259,7 @@ class MainWindow(QMainWindow):
             return
         widget.close()
         self.initWidget()
+        self.acv = None
 
     def onSavefile(self):
         pass
@@ -290,6 +295,23 @@ class MainWindow(QMainWindow):
         # Zero Current
         pass
 
-    def onDataProcess(self, evt):
+    def initDataProcess(self):
+        """
+        将每一种数据处理绑定一个widget，即每一次点击后的跳出窗口
+        :return:
+        """
+        return {
+            '数据平滑': SmoothWidget(self), '导数': DerivativeWidget(self), '积分': IntegrateWidget(self),
+            '半积分和半微分': None, '插值': InterpolateWidget(self), '基线拟合和扣除': BaselineFitWidget(self),
+            '线性基线修正': None, '数据点删除': None, '背景扣除': None,
+            '信号平均': None, '数学运算': None, '傅里叶频谱': None,
+        }
+
+    def onDataProcess(self, evt: QAction):
         # 数据处理模块的handler
-        print('data process:', evt)
+        print('data process:', evt.text())
+        widget = self.centralWidget()
+        if widget is None or self.acv is None:
+            self.errInfoWidget.showInfo("暂无数据输入!")
+            return
+        self.dpWidgets[evt.text()].show()
