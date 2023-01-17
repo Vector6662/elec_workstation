@@ -1,7 +1,7 @@
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QFileDialog, QGridLayout, QWidget, QAction, QLabel, QHBoxLayout, QVBoxLayout, QCheckBox
 
-from techniques.ACV import ACV
+
 
 
 # def open_file(window, evt=None):

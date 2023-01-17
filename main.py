@@ -24,6 +24,14 @@ QLabel#Title1 {
     font-size:25px;
     font:bold;
 }
+QLabel#BasicParams {
+    font-size:20px;
+    color:blue;
+}
+QLabel#AdditionalParams {
+    font-size:20px;
+    color:red;
+}
 '''
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

@@ -70,7 +70,7 @@ class DataModifyWindow(QWidget):
         x.append(self.x)
         y.append(self.y)
         pen = pg.mkPen(color=(255, 0, 0), width=30)
-        plotData = self.parent.acv.plotWidget.plot(x, y, pen=pen)
+        plotData = self.parent.technique.plotWidget.plot(x, y, pen=pen)
         plotData.setSymbol('x')
         plotData.setSymbolSize(15)
         plotData.sigClicked.connect(self.onHover)
@@ -137,7 +137,7 @@ class DerivativeWidget(QWidget):
         self.setLayout(layout)
 
     def onClick(self):
-        self.parent.acv.n_derivative(deg=self.currentIndex)
+        self.parent.technique.n_derivative(deg=self.currentIndex)
         self.close()
 
     def onTextChanged(self, s):
@@ -189,7 +189,7 @@ class SmoothWidget(QWidget):
             self.parent.errInfoWidget.showInfo(
                 'polyorder({}) must be less than window_length({})!'.format(self.points, self.polyorder))
             return
-        self.parent.acv.smooth(self.points, self.polyorder, self.choose)
+        self.parent.technique.smooth(self.points, self.polyorder, self.choose)
         self.close()
 
     def onChoose(self, s):
@@ -233,7 +233,7 @@ class IntegrateWidget(QWidget):
         layout.addWidget(button)
 
     def onClick(self):
-        self.parent.acv.integrate(self.nameDict[self.name])
+        self.parent.technique.integrate(self.nameDict[self.name])
         self.close()
 
     def onChoose(self, s: str):
@@ -267,7 +267,7 @@ class InterpolateWidget(QWidget):
         self.setLayout(layout)
 
     def onClick(self):
-        self.parent.acv.interpolate(self.density)
+        self.parent.technique.interpolate(self.density)
         self.close()
 
     def onChoose(self, s):
@@ -354,7 +354,7 @@ class BaselineFitWidget(QWidget):
         difference = False
         if self.confirm == '差值':
             difference = True
-        self.parent.acv.baseline_fit(self.deg, self.algorithm, difference)
+        self.parent.technique.baseline_fit(self.deg, self.algorithm, difference)
         self.close()
 
     def onAddPeek(self):

@@ -14,7 +14,8 @@ from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 import gui.handlers as handlers
 from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
     InterpolateWidget, BaselineFitWidget
-from techniques.ACV import ACV
+import techniques.interface
+import techniques.implements
 import techniques.dataprocess as dp
 
 
@@ -24,7 +25,7 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(*args, **kwargs)
         self.errInfoWidget = ErrorInfoWidget()  # 暂时错误信息
         self.actions = {}
-        self.acv = None
+        self.technique = None
         self.plotMark = None  # 显示鼠标所在坐标点
         self.dataModifyWindow = None  # 数据点修改子窗口
         self.initActions()
@@ -183,11 +184,11 @@ class MainWindow(QMainWindow):
     def onMouseMoved(self, evt):  # event是window的，而不是widget的，似乎没有widget会有event
         # print('onMouseMoved: ', type(evt), evt.x(), evt.y())
 
-        vb = self.acv.plotWidget.getPlotItem().vb
+        vb = self.technique.plotWidget.getPlotItem().vb
         if vb.mapSceneToView(evt):
             point = vb.mapSceneToView(evt)
             x, y = round(point.x(), 4), round(point.y(), 4)
-            self.acv.posWidget.setText("E={}V, i={}e-{}A".format(x, y, self.acv.Sensitivity))
+            self.technique.positionWidget.setText("E={}V, i={}e-{}A".format(x, y, self.technique.sensitivity))
             # print("x={}V, y={}A".format(x, y))
             # if x not in self.acv.xToy:
             #     return
@@ -202,7 +203,7 @@ class MainWindow(QMainWindow):
     def onMouseClicked(self, evt: MouseClickEvent):
         if not evt.double():
             return
-        vb = self.acv.plotWidget.getPlotItem().vb
+        vb = self.technique.plotWidget.getPlotItem().vb
         if vb.mapSceneToView(evt.scenePos()):
             point = vb.mapSceneToView(evt.scenePos())
             x, y = round(point.x(), 4), round(point.y(), 4)
@@ -219,25 +220,24 @@ class MainWindow(QMainWindow):
 
     def onOpenfile(self):
         file_name, file_type = QFileDialog.getOpenFileName(self, "选取目录", "./", "Files (*.txt *.bin)")
-        if len(file_name) == 0:
-            return
+        lines = techniques.interface.open_file(file_name)
+        technique = lines[1]
+        self.technique = techniques.implements.techniqueDict[technique](self, lines, file_name, file_type)
 
-        self.acv = ACV(self, file_name, file_type)
-
-        self.acv.plotWidget.scene().sigMouseMoved.connect(self.onMouseMoved)  # 目前觉得只有window才能够监听鼠标事件
-        self.acv.plotWidget.scene().sigMouseClicked.connect(self.onMouseClicked)
+        self.technique.plotWidget.scene().sigMouseMoved.connect(self.onMouseMoved)  # 目前觉得只有window才能够监听鼠标事件
+        self.technique.plotWidget.scene().sigMouseClicked.connect(self.onMouseClicked)
 
         layout = QGridLayout()
         rightLayout = QVBoxLayout()  # 主界面右侧，展示实验参数
-        rightLayout.addWidget(self.acv.textWidget)
+        rightLayout.addWidget(self.technique.parameterWidget)
 
         layout.addLayout(rightLayout, 0, 1)
         showPointsWidget = QCheckBox("显示数据点")  # 显示数据点
         showPointsWidget.stateChanged.connect(self.onStateChanged)  # 显示/隐藏离散数据点
         rightLayout.addWidget(showPointsWidget)
 
-        layout.addWidget(self.acv.plotWidget, 0, 0)  # 曲线可视化
-        layout.addWidget(self.acv.posWidget, 1, 0)  # 坐标实时显示
+        layout.addWidget(self.technique.plotWidget, 0, 0)  # 曲线可视化
+        layout.addWidget(self.technique.positionWidget, 1, 0)  # 坐标实时显示
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -249,9 +249,9 @@ class MainWindow(QMainWindow):
     def onStateChanged(self, state):
         # 显示/隐藏原始数据点
         if state == 2:  # checked
-            self.acv.showDataPoint(True)
+            self.technique.showDataPoint(True)
         elif state == 0:  # unchecked
-            self.acv.showDataPoint(False)
+            self.technique.showDataPoint(False)
 
     def onClosefile(self):
         widget = self.centralWidget()
@@ -259,7 +259,7 @@ class MainWindow(QMainWindow):
             return
         widget.close()
         self.initWidget()
-        self.acv = None
+        self.technique = None
 
     def onSavefile(self):
         pass
@@ -311,7 +311,7 @@ class MainWindow(QMainWindow):
         # 数据处理模块的handler
         print('data process:', evt.text())
         widget = self.centralWidget()
-        if widget is None or self.acv is None:
+        if widget is None or self.technique is None:
             self.errInfoWidget.showInfo("暂无数据输入!")
             return
         self.dpWidgets[evt.text()].show()
