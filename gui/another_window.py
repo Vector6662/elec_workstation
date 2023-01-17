@@ -189,6 +189,7 @@ class SmoothWidget(QWidget):
             self.parent.errInfoWidget.showInfo(
                 'polyorder({}) must be less than window_length({})!'.format(self.points, self.polyorder))
             return
+
         self.parent.technique.smooth(self.points, self.polyorder, self.choose)
         self.close()
 
@@ -309,7 +310,7 @@ class BaselineFitWidget(QWidget):
         fitLayout.addWidget(QLabel('算法选择: '), 0, 0)
         algWidget = QComboBox()  # 选择拟合算法
         algWidget.currentTextChanged.connect(self.onAlgChoose)
-        algWidget.addItems(['普通最小二乘', '多项式最小二乘'])
+        algWidget.addItems(['最小二乘', '正则化最小二乘'])
         fitLayout.addWidget(algWidget, 0, 1)
         fitLayout.addWidget(QLabel('基线拟合项次'), 1, 0)
         degWidget = QComboBox()  # 基线拟合项次 选择

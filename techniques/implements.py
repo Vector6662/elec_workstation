@@ -2,37 +2,39 @@ from techniques.interface import AbstractTechnique
 import string
 
 
-def sensitivityHelper(text: string):
-    """
-    辅助函数。解析格式如:1e-2, 1e+234, 1e-11 格式的灵敏度
-    如果是普通浮点数形式（如0.001），则会先转换为科学计数法
-    :param text: 灵敏度字符串字符串
-    :return: 符号，+或-；灵敏度绝对值
-    """
-    if "e" not in text:
-        text = "1e-{}".format(len(text.split(".")[1]))
-    text = text.strip()
-    symbolIndex = text.find("e") + 1
-    symbol = text[symbolIndex]
-    sensitivity = int(text[symbolIndex + 1:])
-    return symbol, sensitivity
-
-
-def parseHelper(lines, start, end):
+def parseParamHelper(lines, start, end):
     """
     解析一般情况下的参数，给出区间即可解析。注意end是开区间，不包含
-    :return: additionalParams, sensitivity, symbol
+    :return: additionalParams
     """
     # 解析additionalParams
     additionalParams = {}
-    sensitivity, symbol = None, None
     for i in range(start, end):
         line = lines[i]
         k, v = line.split("=")[0].strip(), line.split("=")[1].strip()
-        if "Sensitivity" in k:
-            symbol, sensitivity = sensitivityHelper(v)
         additionalParams[k] = v
-    return additionalParams, sensitivity, symbol
+    return additionalParams
+
+
+def formatLabel(text, carry):
+    """
+    格式化label，会加上进位
+    :param text: 输入例子：Potential/V、Total(i/A)
+    :param carry:
+    :return:
+    """
+    if carry == 0:
+        return text
+    str1, str2 = text.split("/")
+    return "{}/1e{}{}".format(str1, carry, str2)
+
+
+def parseCurveHelper(dataDict: dict, carryDict: dict, xLabel: str, yLabel: str, xLabelAlias=None, yLabelAlias=None):
+    curX, curY = dataDict[xLabel], dataDict[yLabel]
+    curXCarry, curYCarry = carryDict[xLabel], carryDict[yLabel]
+    curXLabel, curYLabel = formatLabel(xLabel if xLabelAlias is None else xLabelAlias, curXCarry), \
+                           formatLabel(yLabel if yLabelAlias is None else yLabelAlias, curYCarry)
+    return curX, curY, curXCarry, curYCarry, curXLabel, curYLabel
 
 
 class ACV(AbstractTechnique):  # A.C. Voltammetry
@@ -40,22 +42,19 @@ class ACV(AbstractTechnique):  # A.C. Voltammetry
         super().__init__(parent, lines, file_name, file_type)
 
     def parseParams(self):
-        self.additionalParams, self.sensitivity, self.symbol = parseHelper(self.lines, 8, 16)
-        # self.additionalParams = {
-        #     'Init E(V)': float(self.lines[8].split("=")[1]),
-        #     'Final E(V)': float(self.lines[9].split("=")[1]),
-        #     'Incr E(V)': float(self.lines[10].split("=")[1]),
-        #     'Amplitude(V)': float(self.lines[11].split("=")[1]),
-        #     'Frequency(Hz)': float(self.lines[12].split("=")[1]),
-        #     'Sample Period(S)': float(self.lines[13].split("=")[1]),
-        #     'Quiet Time(S)': float(self.lines[14].split("=")[1]),
-        #     'Sensitivity(A/V)': self.lines[15].split("=")[1],
-        # }
-        # self.symbol, self.sensitivity = sensitivityHelper(self.lines[15].split("=")[1])
+        self.additionalParams = parseParamHelper(self.lines, 8, 16)
         self.analyseParams = {
             'Ep': self.ep(), 'Eh': self.eh(), 'Hpw': self.hpw(), 'Ap': self.ap()
         }
         return 17
+
+    def parseCurrentCurves(self):
+        labels = list(self.dataDict.keys())
+        self.curX, self.curY, self.curXCarry, self.curYCarry, self.curXLabel, self.curYLabel \
+            = parseCurveHelper(self.dataDict, self.carryDict, labels[0], labels[1], yLabelAlias='AC Current/A')
+        self.xKey, self.xUnit, self.yKey, self.yUnit = 'E', 'V', 'i', 'A'
+
+        self.curves.append({'x': self.curX, 'y': self.curY})
 
     def ep(self):
         return 0
@@ -75,10 +74,8 @@ class BEL(AbstractTechnique):  # Bulk Electrolysis with Coulometry
         super().__init__(parent, lines, file_name, file_type)
 
     def parseParams(self):
-        self.additionalParams, _, _ = parseHelper(self.lines, 8, 11)
-        self.symbol = '-'
-        self.sensitivity = 5  # 用total Q作为灵敏度
-        self.analyseParams, _, _ = parseHelper(self.lines, 12, 14)
+        self.additionalParams = parseParamHelper(self.lines, 8, 11)
+        self.analyseParams = parseParamHelper(self.lines, 12, 14)
         return 15
 
 
@@ -87,8 +84,7 @@ class CC(AbstractTechnique):  # Chronocoulometry
         super().__init__(parent, lines, file_name, file_type)
 
     def parseParams(self):
-        self.additionalParams, _, _ = parseHelper(self.lines, 8, 15)
-        self.sensitivity, self.symbol = 6, '-'
+        self.additionalParams = parseParamHelper(self.lines, 8, 15)
         self.analyseParams = {
             'F_Slp': self.lines[17].split("=")[1],
             'F_Int': self.lines[18].split("=")[1],
@@ -115,6 +111,21 @@ class CC(AbstractTechnique):  # Chronocoulometry
                                           self.analyseParams['R_Cor'])
         return basicText, additionalText, analysisText
 
+    def parseCurrentCurves(self):
+        labels = list(self.dataDict.keys())
+        self.curX, self.curY, self.curXCarry, self.curYCarry, self.curXLabel, self.curYLabel \
+            = parseCurveHelper(self.dataDict, self.carryDict, labels[0], labels[1])
+        self.xKey, self.xUnit, self.yKey, self.yUnit = 't', 'S', 'Q', 'C'
+        end, pre = 0, self.curX[0]
+        for i in range(1, len(self.curX)):
+            y = self.curY[i]
+            if y < pre:
+                end = i
+                break
+            pre = y
+        self.curves.append({'x': self.curX[0:end], 'y': self.curY[0:end]})
+        self.curves.append({'x': self.curX[end:], 'y': self.curY[end:]})
+
 
 class CP(AbstractTechnique):  # Chronopotentiometry
     def __init__(self, parent, lines, file_name, file_type):
@@ -139,9 +150,8 @@ class CV(AbstractTechnique):  # Cyclic Voltammetry
             'Segment': float(self.lines[13].split("=")[1]),  # segment数量
             'Sample Interval': float(self.lines[14].split("=")[1]),
             'Quiet Time': float(self.lines[15].split("=")[1]),
-            'Sensitivity': self.lines[16].split("=")[1]  # Sensitivity数据本身
+            'Sensitivity': self.lines[16].split("=")[1]
         }
-        self.symbol, self.sensitivity = sensitivityHelper(self.lines[16].split("=")[1])
         return 21
 
 

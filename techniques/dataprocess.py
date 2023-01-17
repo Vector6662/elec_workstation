@@ -30,9 +30,10 @@ def lsq_fit(x, y, deg: int):
     return x, f(x)
 
 
-def ols_fit(x, y):
+def ols_fit(x, y, deg: int):
     """
     普通最小二乘拟合
+    :param deg:
     :param x:
     :param y:
     :return:
@@ -125,6 +126,7 @@ def interpolate(x: list, y: list, density: int):
     # density:设置插入密度
     # 采用的是b - spline样条函数
     # 报错：ValueError: Expect x to be a 1-D sorted array_like. 解决方案是是，x数据得递增排列
+    # todo 有些数据本身就是递增的
     x, y = x[::-1], y[::-1]
     x_interp = np.linspace(min(x), max(x), len(x) * density)
     y_interp = scipy.interpolate.make_interp_spline(x, y)(x_interp)

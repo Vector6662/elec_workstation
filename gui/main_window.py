@@ -17,6 +17,7 @@ from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidg
 import techniques.interface
 import techniques.implements
 import techniques.dataprocess as dp
+import math
 
 
 class MainWindow(QMainWindow):
@@ -85,7 +86,8 @@ class MainWindow(QMainWindow):
             'action_dp_integrate': ['', '积分', 'Integration', False, None],  # 积分
             'action_dp_semi': ['', '半微分和半积分', 'Semiinteg and Semideriv', False, None],  # 半微分和半积分
             'action_dp_interpolate': ['', '插值', 'Interpolation', False, None],  # 插值
-            'action_dp_baseline_fitting': ['', '基线拟合和扣除', 'Baseline Fitting & Subtraction', False, None],  # 基线拟合和扣除
+            'action_dp_baseline_fitting': ['', '基线拟合和扣除', 'Baseline Fitting & Subtraction', False, None],
+            # 基线拟合和扣除
 
             'action_dp_baseline_correction': ['', '线性基线修正', 'Linear Baseline Correction', False, None],  # 线性基线修正
             'action_dp_datapoint_remove': ['', '数据点移除', 'Data Point Removing', False, None],  # 数据点移除
@@ -188,7 +190,13 @@ class MainWindow(QMainWindow):
         if vb.mapSceneToView(evt):
             point = vb.mapSceneToView(evt)
             x, y = round(point.x(), 4), round(point.y(), 4)
-            self.technique.positionWidget.setText("E={}V, i={}e-{}A".format(x, y, self.technique.sensitivity))
+            format1, format2 = "{}={}e{}{}", "{}={}{}"  # E=0.3e-1V, i=0.22A
+            curXCarry, curYCarry = self.technique.curXCarry, self.technique.curYCarry
+            xKey, xUnit, yKey, yUnit = self.technique.xKey, self.technique.xUnit, self.technique.yKey, self.technique.yUnit
+            x = format2.format(xKey, x, xUnit) if curXCarry == 0 else format1.format(xKey, x, curXCarry, xUnit)
+            y = format2.format(yKey, y, yUnit) if curYCarry == 0 else format1.format(yKey, y, curYCarry, yUnit)
+
+            self.technique.positionWidget.setText('{}  {}'.format(x, y))
             # print("x={}V, y={}A".format(x, y))
             # if x not in self.acv.xToy:
             #     return
@@ -249,9 +257,9 @@ class MainWindow(QMainWindow):
     def onStateChanged(self, state):
         # 显示/隐藏原始数据点
         if state == 2:  # checked
-            self.technique.showDataPoint(True)
+            self.technique.showPoints(True)
         elif state == 0:  # unchecked
-            self.technique.showDataPoint(False)
+            self.technique.showPoints(False)
 
     def onClosefile(self):
         widget = self.centralWidget()
