@@ -1,3 +1,5 @@
+import os
+
 from PyQt5.QtCore import QFile, Qt
 from PyQt5.QtWidgets import (
     QMainWindow, QMenu, QAction, QStatusBar, QMenuBar, QLabel, QVBoxLayout, QStackedLayout,
@@ -9,11 +11,12 @@ from PyQt5.QtGui import QIcon, QColor, QPalette, QFont, QKeySequence
 import PyQt5
 import pyqtgraph as pg
 import numpy as np
+from past.builtins import execfile
 from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 
 import gui.handlers as handlers
 from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
-    InterpolateWidget, BaselineFitWidget
+    InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget
 import techniques.interface
 import techniques.implements
 import techniques.dataprocess as dp
@@ -24,18 +27,25 @@ class MainWindow(QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
+        self.configFile = 'chi.cfg'  # 配置文件路径
+        self.popoutRef = None  # 当前弹出的窗口
         self.errInfoWidget = ErrorInfoWidget()  # 暂时错误信息
-        self.actions = {}
         self.technique = None
-        self.plotMark = None  # 显示鼠标所在坐标点
         self.dataModifyWindow = None  # 数据点修改子窗口
-        self.initActions()
 
         self.setWindowTitle("Ch660D电化学工作站")
-        self.setMinimumSize(1600, 800)
+        self.resize(1600, 900)
+
+        # 读取并解析配置文件
+        self.recentOpen = None
+        self.initConfig()
+
+        # actions。创建所有action对象，并绑定hanlder
+        self.actions = {}
+        self.initActions()
+
         # toolbar
         toolbar = self.initToolbar()
-        # toolbar = ToolBar(self)
         self.addToolBar(toolbar)
         self.setStatusBar(QStatusBar(self))
 
@@ -48,6 +58,10 @@ class MainWindow(QMainWindow):
         self.initWidget()
 
     def initWidget(self):
+        """
+        初始界面，仅有”打开文件“和”开始实验“提示
+        :return:
+        """
         initWidget = QWidget()
         initWidget.setAutoFillBackground(True)
         initLayout = QGridLayout()
@@ -69,9 +83,11 @@ class MainWindow(QMainWindow):
     def initActions(self):
         actions_dict = {
             # icon path, 名称, status tip, is checkable, handler
+
             'action_new': ['icons/new.svg', "新建", "new", False, self.onNew],
             'action_openfile': ["icons/opendir.svg", "打开", 'open file', False, self.onOpenfile],
-            'action_closefile': ['', '关闭', 'close file', False, self.onClosefile],
+            'action_closefile': ['', '关闭', 'close file', False, self.onCloseFile],
+            'action_exit': ['', '退出', 'exit', False, self.onExit],
             'action_savefile': ['icons/save.svg', '另存为', 'save', False, self.onSavefile],
             'action_print': ['icons/print.svg', '打印', "print", False, self.onPrint],
             'action_technique': ['icons/technique.svg', '实验技术', "technique", False, self.onTechnique],
@@ -97,6 +113,12 @@ class MainWindow(QMainWindow):
             'action_dp_math_ops': ['', '数学运算', 'Mathematical Operation', False, None],  # 数学运算
             'action_dp_fourier_spectrum': ['', '傅里叶频谱', 'Fourier Spectrum', False, None],  # 傅里叶频谱
 
+            'action_show_points': ['', '显示数据点', 'show points', True, self.onShowPoints],
+            'action_data_list': ['', '数据列表', 'data lists', False, self.onDataList],
+            'action_data_info': ['', '数据信息', 'data information', False, self.onDataInfo],
+            'action_clock': ['', '时钟', 'clock', False, self.onClock],
+            'action_new_window': ['', '新窗口', 'new window', False, self.onNewWindow]
+
         }
         self.actions = {}
         for key in actions_dict:
@@ -120,6 +142,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.actions['action_openfile'])
         file_menu.addAction(self.actions['action_closefile'])
         file_menu.addSeparator()
+        for i in range(0, len(self.recentOpen)):
+            path = self.recentOpen[i]
+            file_menu.addAction('{} {}'.format(i + 1, path))
+        file_menu.triggered.connect(self.onOpenRecentFile)
+        file_menu.addSeparator()
+        file_menu.addAction(self.actions['action_exit'])
 
         # settings
         settings_menu = menu.addMenu("设置(&S)")
@@ -134,6 +162,7 @@ class MainWindow(QMainWindow):
 
         # graphic
         graphic_menu = menu.addMenu("图像(&G)")
+        graphic_menu.addAction(self.actions['action_show_points'])
 
         # data process
         data_menu = menu.addMenu("数据处理(&D)")
@@ -150,10 +179,13 @@ class MainWindow(QMainWindow):
         simulate_menu = menu.addMenu("模拟")
 
         # view
-        view_menu = menu.addMenu("视图(&V)")
-
-        # window
-        window_menu = menu.addMenu("窗口(&W)")
+        view_menu = menu.addMenu("视图和窗口(&V)")
+        view_menu.addAction(self.actions['action_data_list'])
+        view_menu.addAction(self.actions['action_data_info'])
+        view_menu.addSeparator()
+        view_menu.addAction(self.actions['action_clock'])
+        view_menu.addSeparator()
+        view_menu.addAction(self.actions['action_new_window'])
 
         # help
         help_menu = menu.addMenu("帮助(&H)")
@@ -183,6 +215,44 @@ class MainWindow(QMainWindow):
 
         return toolbar
 
+    def initConfig(self):
+        """
+        初始化配置文件，配置文件路径由属性configFile决定
+        :return:
+        """
+        self.recentOpen = []
+        f = None
+        try:
+            f = open(self.configFile, 'r', encoding='utf-8')
+            data = f.read()
+            lines = data.splitlines()
+            paths = lines[0].split("=")[1]  # 格式为recent_open:path1,path2,path3
+            if len(paths) == 0:
+                return
+            paths = paths.split(",")
+            self.recentOpen = [item for item in paths]
+        except:
+            return
+        finally:
+            if f:
+                f.close()
+
+    def closeEvent(self, *args, **kwargs):
+        """
+        窗口关闭时执行的操作。写入配置文件
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        if len(self.recentOpen) == 0:
+            return
+        recentSet = list(set(self.recentOpen))[::-1]  # 去重。可能一个文件运行过程中被打开过多次。反转，最近被打开的文件在list最后
+        if len(recentSet) > 10:  # 长度太大，则去掉一部分文件
+            recentSet = recentSet[:10]
+        with open(self.configFile, 'w', encoding='utf-8') as f:
+            text = 'recent_open={}'.format(','.join(recentSet))
+            f.write(text)
+
     def onMouseMoved(self, evt):  # event是window的，而不是widget的，似乎没有widget会有event
         # print('onMouseMoved: ', type(evt), evt.x(), evt.y())
 
@@ -197,16 +267,6 @@ class MainWindow(QMainWindow):
             y = format2.format(yKey, y, yUnit) if curYCarry == 0 else format1.format(yKey, y, curYCarry, yUnit)
 
             self.technique.positionWidget.setText('{}  {}'.format(x, y))
-            # print("x={}V, y={}A".format(x, y))
-            # if x not in self.acv.xToy:
-            #     return
-            # markX, markY = [], []
-            # markX.append(x)
-            # markY.append(self.acv.xToy[x])
-            # if self.plotMark is None:  # 标记鼠标在曲线上的位置
-            #     self.plotMark = self.acv.plotWidget.plot(markX, markY, symbol='+')
-            # else:
-            #     self.plotMark.setData(markX, markY, symbol='+')
 
     def onMouseClicked(self, evt: MouseClickEvent):
         if not evt.double():
@@ -226,9 +286,43 @@ class MainWindow(QMainWindow):
         # 新建
         self.errInfoWidget.showInfo("can not open com port!")
 
+    def onOpenRecentFile(self, evt):
+        # todo file_menu下所有的action都绑定了此handler，只有最近打开文件才会执行
+        #  最近打开文件路径的最前边都有一个编号，如"1 C:/acv1.txt"，只有这种格式的才会执行以下解析，否则会return。
+        #  也就是说，file_memu下边action除了最近打开文件，都有执行两个handler，目前来看不是一种优雅的实现方式
+        if not evt.text()[0].isdigit():
+            return
+        path = evt.text().split(" ")[1]
+        file_type = path.split(".")[-1]
+        self.parse(path, file_type)
+
     def onOpenfile(self):
         file_name, file_type = QFileDialog.getOpenFileName(self, "选取目录", "./", "Files (*.txt *.bin)")
-        lines = techniques.interface.open_file(file_name)
+        if file_name is None or len(file_name) == 0:
+            TypeError('error on open file.')
+            return
+        self.parse(file_name, file_type)
+
+    def parse(self, file_name, file_type):
+        """
+        解析主界面数据
+        :return:
+        """
+        f, file_data = None, None
+        try:
+            f = open(file_name, "r")
+            file_data = f.read()
+        except:
+            self.errInfoWidget.showInfo("文件路径错误：找不到该文件")
+            return
+        finally:
+            if f:
+                f.close()
+
+        lines = file_data.splitlines()
+
+        self.recentOpen.append(file_name)  # 成功打开后记录
+        self.file_data = file_data
         technique = lines[1]
         self.technique = techniques.implements.techniqueDict[technique](self, lines, file_name, file_type)
 
@@ -236,13 +330,10 @@ class MainWindow(QMainWindow):
         self.technique.plotWidget.scene().sigMouseClicked.connect(self.onMouseClicked)
 
         layout = QGridLayout()
+
         rightLayout = QVBoxLayout()  # 主界面右侧，展示实验参数
         rightLayout.addWidget(self.technique.parameterWidget)
-
         layout.addLayout(rightLayout, 0, 1)
-        showPointsWidget = QCheckBox("显示数据点")  # 显示数据点
-        showPointsWidget.stateChanged.connect(self.onStateChanged)  # 显示/隐藏离散数据点
-        rightLayout.addWidget(showPointsWidget)
 
         layout.addWidget(self.technique.plotWidget, 0, 0)  # 曲线可视化
         layout.addWidget(self.technique.positionWidget, 1, 0)  # 坐标实时显示
@@ -251,23 +342,20 @@ class MainWindow(QMainWindow):
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
-    # def onFirstClicked(self,evt):
-    #     # 打开window后第一次点击widget，打开文件
-    #     print(evt)
-    def onStateChanged(self, state):
+    def onShowPoints(self, state):
         # 显示/隐藏原始数据点
-        if state == 2:  # checked
-            self.technique.showPoints(True)
-        elif state == 0:  # unchecked
-            self.technique.showPoints(False)
+        self.technique.showPoints(state)
 
-    def onClosefile(self):
+    def onCloseFile(self):
         widget = self.centralWidget()
         if widget is None:
             return
         widget.close()
         self.initWidget()
         self.technique = None
+
+    def onExit(self):
+        self.close()
 
     def onSavefile(self):
         pass
@@ -309,8 +397,8 @@ class MainWindow(QMainWindow):
         :return:
         """
         return {
-            '数据平滑': SmoothWidget(self), '导数': DerivativeWidget(self), '积分': IntegrateWidget(self),
-            '半积分和半微分': None, '插值': InterpolateWidget(self), '基线拟合和扣除': BaselineFitWidget(self),
+            '数据平滑': SmoothWidget, '导数': DerivativeWidget, '积分': IntegrateWidget,
+            '半积分和半微分': None, '插值': InterpolateWidget, '基线拟合和扣除': BaselineFitWidget,
             '线性基线修正': None, '数据点删除': None, '背景扣除': None,
             '信号平均': None, '数学运算': None, '傅里叶频谱': None,
         }
@@ -322,4 +410,24 @@ class MainWindow(QMainWindow):
         if widget is None or self.technique is None:
             self.errInfoWidget.showInfo("暂无数据输入!")
             return
-        self.dpWidgets[evt.text()].show()
+        self.popoutRef = self.dpWidgets[evt.text()](self)
+        self.popoutRef.show()
+
+    def onDataList(self):
+        self.popoutRef = DataListWidget(self)
+        self.popoutRef.show()
+
+    def onDataInfo(self):
+        self.popoutRef = DataInfoWidget(self)
+        self.popoutRef.show()
+
+    def onClock(self):
+        self.popoutRef = ClockWidget(self)
+        self.popoutRef.show()
+
+    def onNewWindow(self):
+        # current_work_dir = os.path.dirname(__file__)
+        # path = os.path.join(current_work_dir[:-4], 'main.py')
+        # execfile(path)
+        self.c = MainWindow()
+        self.c.show()

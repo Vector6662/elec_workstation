@@ -1,7 +1,9 @@
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt
-
+"""
+傅里叶变换平滑和卷积平滑
+"""
 def moving_average(interval, windowsize):
     window = np.ones(int(windowsize)) / float(windowsize)
     re = np.convolve(interval, window, 'same')

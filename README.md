@@ -132,6 +132,17 @@ Aurora Equation安装教程：https://blog.csdn.net/TycoonL/article/details/1155
 
 伪代码语法：https://zhuanlan.zhihu.com/p/166418214、https://blog.csdn.net/wangh0802/article/details/115608346
 
+aurora原始配置
+
+```
+\usepackage{amsmath}
+\usepackage{amssymb}
+% \usepackage{euler}
+
+\providecommand{\abs}[1]{\left\lvert#1\right\rvert}
+\providecommand{\norm}[1]{\left\lVert#1\right\rVert}
+```
+
 
 
 # 论文内容备忘录

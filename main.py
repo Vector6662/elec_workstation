@@ -25,12 +25,20 @@ QLabel#Title1 {
     font:bold;
 }
 QLabel#BasicParams {
-    font-size:20px;
+    font-size:23px;
     color:blue;
 }
 QLabel#AdditionalParams {
-    font-size:20px;
+    font-size:23px;
     color:red;
+}
+QLabel#Position {
+    font-size:20px;
+    color:green;
+}
+QLabel#Style1 {
+    font-size:20px;
+    font:bold;
 }
 '''
 if __name__ == '__main__':

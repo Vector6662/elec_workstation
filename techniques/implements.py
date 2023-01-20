@@ -30,6 +30,16 @@ def formatLabel(text, carry):
 
 
 def parseCurveHelper(dataDict: dict, carryDict: dict, xLabel: str, yLabel: str, xLabelAlias=None, yLabelAlias=None):
+    """
+    辅助方法，解析数据图像的必要参数
+    :param dataDict:
+    :param carryDict: 每一个label下数据进位，如{-3,-1,0}
+    :param xLabel: 当前图像x轴显示的数据在dataDict中的key
+    :param yLabel: 同理
+    :param xLabelAlias: 别名，按照chi660设备，文件中的label名称不一定是最终显示在坐标轴legend上的那个
+    :param yLabelAlias: 同理
+    :return:
+    """
     curX, curY = dataDict[xLabel], dataDict[yLabel]
     curXCarry, curYCarry = carryDict[xLabel], carryDict[yLabel]
     curXLabel, curYLabel = formatLabel(xLabel if xLabelAlias is None else xLabelAlias, curXCarry), \

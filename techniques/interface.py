@@ -3,19 +3,10 @@ import string
 import math
 
 import pyqtgraph as pg
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QHBoxLayout, QPushButton, QLineEdit, QComboBox, \
     QListWidget, QListWidgetItem, QGridLayout, QCheckBox
 import techniques.dataprocess as dp
-
-
-def open_file(file_name):
-    if file_name is None or len(file_name) == 0:
-        TypeError('error on open file.')
-        return
-    with open(file_name, "r") as f:  # 返回文件对象
-        data = f.read()
-    f.close()
-    return data.splitlines()
 
 
 def randomColor():
@@ -56,7 +47,7 @@ class AbstractTechnique:
         self.parameterWidget = self.initParameterWidget()
         self.plotWidget, self.mainPlots = self.initPlotWidget()
         # 展示坐标
-        self.positionWidget = QLabel()
+        self.positionWidget = QLabel(objectName='Position')
 
     def parseParams(self) -> int:
         """
@@ -86,6 +77,7 @@ class AbstractTechnique:
             item = self.lines[i].split(",")
             for j in range(length):  # 解析每一行的各列
                 s, label = item[j], indexToLabel[j]
+                # 两种情况，如果数据字符串中有字符'e'，表明此列数据是采用的科学计数法，否则为普通数值
                 if "e" in s:
                     carry = int(s.split("e")[1])
                     self.carryDict[label] = max(self.carryDict[label], carry)
@@ -137,13 +129,14 @@ class AbstractTechnique:
         basicText, additionalText, analysisText = self.formatParameterTexts()
 
         layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignHCenter)
         layout.addWidget(QLabel(basicText, objectName='BasicParams'))
         layout.addWidget(QLabel(additionalText, objectName='BasicParams'))
         layout.addWidget(QLabel(analysisText, objectName='AdditionalParams'))
 
         widget = QWidget()
         widget.setLayout(layout)
-        widget.setFixedSize(300, 700)
+        widget.setFixedSize(400, 700)
 
         return widget
 
@@ -231,4 +224,4 @@ class AbstractTechnique:
             if difference:
                 # todo 显示与原数据之差
                 pass
-            self.plotWidget.plot(x, y, name="{}({}阶). curve {}".format(algorithm, deg, i+1), pen=pen)
+            self.plotWidget.plot(x, y, name="{}({}阶). curve {}".format(algorithm, deg, i + 1), pen=pen)

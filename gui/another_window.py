@@ -2,8 +2,10 @@ from IPython.external.qt_for_kernel import QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QHBoxLayout, QPushButton, QLineEdit, QComboBox, \
-    QListWidget, QListWidgetItem, QGridLayout, QCheckBox
+    QListWidget, QListWidgetItem, QGridLayout, QCheckBox, QScrollArea
 import pyqtgraph as pg
+import time
+from threading import Timer
 
 
 class DataModifyWindow(QWidget):
@@ -296,11 +298,6 @@ class BaselineFitWidget(QWidget):
         self.peeksLayout.addWidget(self.peekWidgetList[0])
         mainLayout.addWidget(peeksWidget, 1, 0)
 
-        # 新增峰两侧按钮
-        addPeekButton = QPushButton('新增')
-        mainLayout.addWidget(addPeekButton, 2, 0)
-        addPeekButton.clicked.connect(self.onAddPeek)
-
         # 基线拟合算法 子layout
         mainLayout.addWidget(QLabel('基线拟合算法', objectName='Title1'), 3, 0)
 
@@ -334,6 +331,10 @@ class BaselineFitWidget(QWidget):
         button = QPushButton('确认')
         button.clicked.connect(self.onClick)
         mainLayout.addWidget(button, 0, 1)
+        # 新增峰两侧按钮
+        addPeekButton = QPushButton('新增峰两侧')
+        mainLayout.addWidget(addPeekButton, 1, 1)
+        addPeekButton.clicked.connect(self.onAddPeek)
 
         self.setLayout(mainLayout)
 
@@ -373,3 +374,102 @@ class BaselineFitWidget(QWidget):
 
     def onConfirm(self, s):
         self.confirm = s
+
+
+class GraphicOptionWidget(QWidget):
+    """
+    图形选项弹出窗口
+    """
+
+    def __init__(self, parent):
+        super(GraphicOptionWidget, self).__init__()
+        self.parent = parent
+        self.setWindowTitle("图形选项")
+        mainLayout = QVBoxLayout()
+
+
+class DataListWidget(QWidget):
+    """
+    数据列表
+    """
+
+    def __init__(self, parent):
+        super(DataListWidget, self).__init__()
+        self.parent = parent
+        self.setWindowTitle('数据列表')
+
+        textEdit = QLabel(self.parent.file_data)
+        textEdit.resize(600, 900)
+        scroll = QScrollArea()
+        scroll.setWidget(textEdit)
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClick)
+
+        layout = QHBoxLayout()
+        layout.addWidget(scroll)
+        layout.addWidget(button)
+        self.setLayout(layout)
+
+    def onClick(self):
+        self.close()
+
+
+class DataInfoWidget(QWidget):
+    def __init__(self, parent):
+        super(DataInfoWidget, self).__init__()
+        self.parent = parent
+        mainLayout = QGridLayout()
+        self.setWindowTitle("数据信息")
+
+        content = "文件名: {}\n源: {}\n型号: {}\n日期: {}\nROM Vers: {}\nProg: {}\n" \
+            .format(self.parent.technique.basicParams['file'][:20],
+                    self.parent.technique.basicParams['dataSource'],
+                    self.parent.technique.basicParams['instrumentModel'],
+                    self.parent.technique.basicParams['date'], '', '')
+        widget = QLabel(content, objectName="Style1")
+        mainLayout.addWidget(widget, 0, 0)
+
+        mainLayout.addWidget(QLabel('--------------------------'), 1, 0)
+
+        widget = QLabel("数据处理执行:", objectName="Title1")
+        widget.setAlignment(Qt.AlignTop)
+        mainLayout.addWidget(widget, 2, 0)
+
+        processContent = ['Smoothing', '1st Derivative', '2nt Derivative', '3nt Derivative', '4nt Derivative',
+                          'Integration', 'Semi-Derivative', 'Semi-Integral', 'Interpolation', 'BaseLine Correlation',
+                          'Data Point Removing', 'Data Point Modifying', 'Background Substraction', 'Signal Avg',
+                          'X math', 'Y math']
+        listWidget = QListWidget()
+        listWidget.addItems(processContent)
+        mainLayout.addWidget(listWidget, 2, 1)
+
+        mainLayout.addWidget(QLabel("标题: ", objectName="Style1"), 3, 0)
+        mainLayout.addWidget(QLabel("注: ", objectName="Style1"), 4, 0)
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClick)
+        mainLayout.addWidget(button, 0, 3)
+
+        self.setLayout(mainLayout)
+
+    def onClick(self):
+        self.close()
+
+
+class ClockWidget(QWidget):
+    def __init__(self, parent):
+        super(ClockWidget, self).__init__()
+        self.parent = parent
+        mainLayout = QHBoxLayout()
+        self.setWindowTitle("时间")
+
+        self.label = QLabel(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())), objectName="Style1")
+        mainLayout.addWidget(self.label)
+
+        self.setLayout(mainLayout)
+        self.task()
+
+    def task(self):
+        self.label.setText(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
+        Timer(1, self.task, ()).start()
