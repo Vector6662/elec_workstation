@@ -18,11 +18,15 @@ class DataModifyWindow(QWidget):
     def __init__(self, x, y, parent):
         super().__init__()
         self.x, self.y = x, y
+        self.text = ''
+        self.plotDataItem = None
         self.parent = parent
-        self.setWindowTitle("修改数据点")
+        self.setWindowTitle("标记管理")
         commentLayout = QHBoxLayout()  # 文字
         self.commentLabel = QLabel("添加注释")
         self.commetText = QLineEdit()
+        self.commetText.textChanged.connect(self.onTextChanged)
+
         self.commentWipe = QPushButton("擦除")  # 擦除
         self.commentWipe.clicked.connect(self.onWipeComment)
         commentLayout.addWidget(self.commentLabel)
@@ -37,7 +41,7 @@ class DataModifyWindow(QWidget):
         layout.addLayout(xLayout)
         layout.addLayout(yLayout)
 
-        self.xLabel, self.yLabel = QLabel('x(A):'), QLabel('y(V):')
+        self.xLabel, self.yLabel = QLabel('X:'), QLabel('Y:')
         self.xText, self.yText = QLineEdit('{}'.format(self.x)), QLineEdit('{}'.format(self.y))
 
         xLayout.addWidget(self.xLabel)
@@ -60,23 +64,28 @@ class DataModifyWindow(QWidget):
         self.setLayout(layout)
         self.show()
 
-    def showData(self, x, y):
-        self.x, self.y = x, y
-        self.xText.setText('{}'.format(self.x))
-        self.yText.setText('{}'.format(self.y))
-        self.show()
-
     def onConfirm(self, evt):
-        print(self.xText.text(), self.yText.text())
+        if self.text is None or len(self.text) == 0:
+            # 没有标记数据，则清除plotWidget中的数据点并删除parent对其的引用
+            self.close()
+            del self.parent.dataModifyWindow[(self.x, self.y)]
+            self.parent.technique.plotWidget.removeItem(self.plotDataItem)
+            return
         x, y = [], []
         x.append(self.x)
         y.append(self.y)
+        if self.plotDataItem is not None:
+            # plotDataItem对象存在，不论有没有修改text，都重新绘制
+            self.parent.technique.plotWidget.removeItem(self.plotDataItem)
         pen = pg.mkPen(color=(255, 0, 0), width=30)
-        plotData = self.parent.technique.plotWidget.plot(x, y, pen=pen)
-        plotData.setSymbol('x')
-        plotData.setSymbolSize(15)
-        plotData.sigClicked.connect(self.onHover)
+        self.plotDataItem = self.parent.technique.plotWidget.plot(x, y, pen=pen, name=self.text)
+        self.plotDataItem.setSymbol('x')
+        self.plotDataItem.setSymbolSize(15)
+        self.plotDataItem.sigClicked.connect(self.onItemClicked)
         self.hide()
+
+    def onTextChanged(self, s):
+        self.text = s
 
     def onCancel(self):
         self.hide()
@@ -84,8 +93,8 @@ class DataModifyWindow(QWidget):
     def onWipeComment(self):
         self.commetText.clear()
 
-    def onHover(self, ev):
-        print(ev)
+    def onItemClicked(self, item):
+        self.show()
 
 
 class ErrorInfoWidget(QWidget):
@@ -381,11 +390,93 @@ class GraphicOptionWidget(QWidget):
     图形选项弹出窗口
     """
 
-    def __init__(self, parent):
+    def __init__(self, parent, basicParams, additionalParams, analyseParams, mainPlots):
         super(GraphicOptionWidget, self).__init__()
         self.parent = parent
         self.setWindowTitle("图形选项")
-        mainLayout = QVBoxLayout()
+        mainLayout = QGridLayout()
+
+        # 屏幕列
+        label = QLabel('屏幕：', objectName='Title1')
+        mainLayout.addWidget(label, 0, 0)
+
+        mainLayout.addWidget(self.pattern1('标题(&E)', self.onBaseline), 1, 0)
+        mainLayout.addWidget(self.pattern1('轴(&X)', self.onBaseline), 2, 0)
+        mainLayout.addWidget(self.pattern1('基线(&B)', self.onBaseline), 3, 0)
+        mainLayout.addWidget(self.pattern1('参数(&M)', self.onParams), 4, 0)
+        mainLayout.addWidget(self.pattern1('结果(&R)', self.onResult), 5, 0)
+
+        # 打印机列
+        label = QLabel('打印机：', objectName='Title1')
+        mainLayout.addWidget(label, 0, 1)
+
+        mainLayout.addWidget(self.pattern1('标题(&E)', self.onResult), 1, 1)
+        mainLayout.addWidget(self.pattern1('轴(&X)', self.onResult), 2, 1)
+        mainLayout.addWidget(self.pattern1('基线(&B)', self.onResult), 3, 1)
+        mainLayout.addWidget(self.pattern1('参数(&M)', self.onResult), 4, 1)
+        mainLayout.addWidget(self.pattern1('结果(&R)', self.onResult), 5, 1)
+
+        # 网络与反转列
+        label = QLabel('网络与反转：', objectName='Title1')
+        mainLayout.addWidget(label, 0, 2)
+
+        mainLayout.addWidget(self.pattern1('X轴网格', self.onResult), 1, 2)
+        mainLayout.addWidget(self.pattern1('Y轴网格', self.onResult), 2, 2)
+        mainLayout.addWidget(self.pattern1('X轴反转', self.onResult), 3, 2)
+        mainLayout.addWidget(self.pattern1('Y轴反转', self.onResult), 4, 2)
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClick)
+        mainLayout.addWidget(button, 0, 4)
+
+        # x轴冻结
+        mainLayout.addWidget(self.pattern2('x轴冻结', '-0.1', '至', '0.5'), 6, 0, 1, 4)
+
+        # y轴冻结
+        mainLayout.addWidget(self.pattern2('y轴冻结', '2e6', '至', '1.4e-5'), 7, 0, 1, 4)
+
+        # x轴标题
+        mainLayout.addWidget(self.pattern2('x轴标题', '', '单', ''), 8, 0, 1, 4)
+        # y轴标题
+        mainLayout.addWidget(self.pattern2('y轴标题', '', '单', ''), 9, 0, 1, 4)
+
+        self.setLayout(mainLayout)
+
+    def pattern1(self, text, func):
+        widget = QCheckBox(text)
+        widget.stateChanged.connect(func)
+        return widget
+
+    def pattern2(self, topic, text1, text2, text3):
+        """
+        布局模板
+        :return:
+        """
+        widget = QWidget()
+        layout = QHBoxLayout()
+        widget.setLayout(layout)
+
+        checkBox = QCheckBox(topic)
+        fromEdit = QLineEdit(text1)
+        label = QLabel(text2)
+        toEdit = QLineEdit(text3)
+        layout.addWidget(checkBox)
+        layout.addWidget(fromEdit)
+        layout.addWidget(label)
+        layout.addWidget(toEdit)
+        return widget
+
+    def onClick(self):
+        self.close()
+
+    def onBaseline(self, state):  # 基线
+        pass
+
+    def onParams(self, state):  # 参数
+        pass
+
+    def onResult(self, state):  # 结果
+        pass
 
 
 class DataListWidget(QWidget):

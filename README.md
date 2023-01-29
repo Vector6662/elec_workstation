@@ -1,10 +1,10 @@
-最终决定用python完成此任务
 
 
+## python基础
 
 [Python super() 详解 最简单的解释](https://blog.csdn.net/wanzew/article/details/106993425)：mro
 
-
+## pyqt5
 
 pyqt教程：https://www.pythonguis.com/tutorials/pyqt-layouts/
 
@@ -44,9 +44,11 @@ event：注意mousemoveevent：
 
 [10.5 QStackedLayout堆叠布局管理器](https://www.cnblogs.com/yuyingblogs/p/16164631.html)
 
+[closeEvent()重写，添加关闭窗口触发的事件](https://blog.csdn.net/u010139869/article/details/79449315):
 
+🎈widget样式配置：[链接](https://github.com/liweizhong666/PyQt5/blob/master/%E7%BE%8E%E5%8C%96/QPushButton/%E6%8C%89%E9%92%AE%E5%B8%B8%E8%A7%81%E6%A0%B7%E5%BC%8F.py)
 
-数据处理：
+## 数据分析
 
 [numpy中的polyfit](https://blog.csdn.net/qq_45804132/article/details/104744632)：polyfit和poly1d
 
@@ -58,15 +60,19 @@ event：注意mousemoveevent：
 
 
 
-傅里叶频谱分析：https://blog.csdn.net/qq_39720178/article/details/124502403
-
-
+### 微分和积分
 
 复合梯形公式：
 
 https://blog.csdn.net/zhuoqingjoking97298/article/details/107351185，实现的优化，包含推导：https://zhuoqing.blog.csdn.net/article/details/107294049
 
+中心差分（梯度）和向前差分：[Matlab如何求离散点的导数](https://blog.csdn.net/qq_43080446/article/details/108542357)
 
+[纯Python实现：函数求导切线图、求偏导、梯度下降法（4）](https://blog.csdn.net/QLBFA/article/details/107558464)：自行实现求偏导的算法，mark一下， 论文中可以写
+
+
+
+### 贝塞尔曲线
 
 Savitzky-Golay 滤波器：
 
@@ -78,11 +84,11 @@ http://t.csdn.cn/ta8su：这个最详细！
 
 
 
-中心差分（梯度）和向前差分：[Matlab如何求离散点的导数](https://blog.csdn.net/qq_43080446/article/details/108542357)
-
-[纯Python实现：函数求导切线图、求偏导、梯度下降法（4）](https://blog.csdn.net/QLBFA/article/details/107558464)：自行实现求偏导的算法，mark一下， 论文中可以写
 
 
+
+
+### 拟合
 
 最小二乘拟合：
 
@@ -98,7 +104,7 @@ https://geek.digiasset.org/pages/mathbasic/least-squares-polynomial-curve-fittin
 
 
 
-
+### 插值
 
 插值：
 
@@ -110,11 +116,17 @@ https://towardsdatascience.com/b%C3%A9zier-interpolation-8033e9a262c2详细推�
 
 
 
+### 分数阶微分
+
 半微分和半积分：
 
 分数阶累加的python实现：https://blog.csdn.net/cauchy7203/article/details/107093205/
 
 
+
+### 傅里叶
+
+傅里叶频谱分析：https://blog.csdn.net/qq_39720178/article/details/124502403
 
 傅里叶变换：
 
@@ -124,7 +136,7 @@ https://blog.csdn.net/sunxmwebstudy/article/details/112762625 实现功能不少
 
 
 
-
+## Aurora安装
 
 Aurora Equation安装教程：https://blog.csdn.net/TycoonL/article/details/115586651
 

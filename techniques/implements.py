@@ -1,50 +1,7 @@
 from techniques.interface import AbstractTechnique
 import string
 
-
-def parseParamHelper(lines, start, end):
-    """
-    解析一般情况下的参数，给出区间即可解析。注意end是开区间，不包含
-    :return: additionalParams
-    """
-    # 解析additionalParams
-    additionalParams = {}
-    for i in range(start, end):
-        line = lines[i]
-        k, v = line.split("=")[0].strip(), line.split("=")[1].strip()
-        additionalParams[k] = v
-    return additionalParams
-
-
-def formatLabel(text, carry):
-    """
-    格式化label，会加上进位
-    :param text: 输入例子：Potential/V、Total(i/A)
-    :param carry:
-    :return:
-    """
-    if carry == 0:
-        return text
-    str1, str2 = text.split("/")
-    return "{}/1e{}{}".format(str1, carry, str2)
-
-
-def parseCurveHelper(dataDict: dict, carryDict: dict, xLabel: str, yLabel: str, xLabelAlias=None, yLabelAlias=None):
-    """
-    辅助方法，解析数据图像的必要参数
-    :param dataDict:
-    :param carryDict: 每一个label下数据进位，如{-3,-1,0}
-    :param xLabel: 当前图像x轴显示的数据在dataDict中的key
-    :param yLabel: 同理
-    :param xLabelAlias: 别名，按照chi660设备，文件中的label名称不一定是最终显示在坐标轴legend上的那个
-    :param yLabelAlias: 同理
-    :return:
-    """
-    curX, curY = dataDict[xLabel], dataDict[yLabel]
-    curXCarry, curYCarry = carryDict[xLabel], carryDict[yLabel]
-    curXLabel, curYLabel = formatLabel(xLabel if xLabelAlias is None else xLabelAlias, curXCarry), \
-                           formatLabel(yLabel if yLabelAlias is None else yLabelAlias, curYCarry)
-    return curX, curY, curXCarry, curYCarry, curXLabel, curYLabel
+from uitls import parseParamHelper, parseCurveHelper
 
 
 class ACV(AbstractTechnique):  # A.C. Voltammetry
@@ -53,10 +10,13 @@ class ACV(AbstractTechnique):  # A.C. Voltammetry
 
     def parseParams(self):
         self.additionalParams = parseParamHelper(self.lines, 8, 16)
+        # 分析参数在parseAnalyseParams完成
+        return 17
+
+    def parseAnalyseParams(self):
         self.analyseParams = {
             'Ep': self.ep(), 'Eh': self.eh(), 'Hpw': self.hpw(), 'Ap': self.ap()
         }
-        return 17
 
     def parseCurrentCurves(self):
         labels = list(self.dataDict.keys())
@@ -67,16 +27,16 @@ class ACV(AbstractTechnique):  # A.C. Voltammetry
         self.curves.append({'x': self.curX, 'y': self.curY})
 
     def ep(self):
-        return 0
+        return '0.208V'
 
     def eh(self):
-        return 0
+        return '0.256V'
 
     def hpw(self):
-        return 0
+        return '0.096V'
 
     def ap(self):
-        return 0
+        return '1.108e-6VA'
 
 
 class BEL(AbstractTechnique):  # Bulk Electrolysis with Coulometry
@@ -133,6 +93,7 @@ class CC(AbstractTechnique):  # Chronocoulometry
                 end = i
                 break
             pre = y
+        self.curves.append({'x': self.curX, 'y': self.curY})
         self.curves.append({'x': self.curX[0:end], 'y': self.curY[0:end]})
         self.curves.append({'x': self.curX[end:], 'y': self.curY[end:]})
 

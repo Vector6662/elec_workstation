@@ -33,8 +33,9 @@ QLabel#AdditionalParams {
     color:red;
 }
 QLabel#Position {
-    font-size:20px;
-    color:green;
+    font-size:25px;
+    font:bold;
+    color:purple;
 }
 QLabel#Style1 {
     font-size:20px;

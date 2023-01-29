@@ -7,10 +7,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QHBoxLayout, QPushButton, QLineEdit, QComboBox, \
     QListWidget, QListWidgetItem, QGridLayout, QCheckBox
 import techniques.dataprocess as dp
-
-
-def randomColor():
-    return random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)
+from uitls import randomColor
 
 
 class AbstractTechnique:
@@ -30,7 +27,7 @@ class AbstractTechnique:
         self.additionalParams = {}  # 附加参数
         self.analyseParams = {}  # 分析参数
         # 数据
-        self.carryDict = {}  # 每一个label的进制
+        self.carryDict = {}  # 每一个label的进位
         self.dataDict = {}
         # 当前曲线信息
         self.curX, self.curY, self.curXLabel, self.curYLabel = None, None, None, None
@@ -41,6 +38,7 @@ class AbstractTechnique:
         # 以下是模板方法，解析以上属性，均可重写
         labelStartIndex = self.parseParams()
         self.parseData(labelStartIndex)
+        self.parseAnalyseParams()
         self.parseCurrentCurves()
 
         # 初始化主界面各个部件
@@ -53,7 +51,7 @@ class AbstractTechnique:
         """
         解析数据过程，需要子类重写。需要解析以下属性
         additionalParams字典，即每种测试技术特定的参数
-        analyseParams：分析参数字典，也是每种测试技术特定参数
+        analyseParams：分析参数字典，也是每种测试技术特定参数。有些测试技术（如acv）此过程的解析依赖所有数据，因此在此之后需要在完成parseAnalyseParams方法的重写
         :return: label start index. label在文件行中的地址
         """
         pass
@@ -72,7 +70,7 @@ class AbstractTechnique:
             indexToLabel[idx] = label
             idx = idx + 1
         length = idx  # label总数，也即len(labels)
-        # 获得每一列的进位，为科学技术法的最大值
+        # 获得每一列的进位，为科学计数法的最大值
         for i in range(start + 2, len(self.lines)):
             item = self.lines[i].split(",")
             for j in range(length):  # 解析每一行的各列
@@ -83,7 +81,7 @@ class AbstractTechnique:
                     self.carryDict[label] = max(self.carryDict[label], carry)
                 else:
                     self.carryDict[label] = 0
-        # 存储数据，以label为单位
+        # 存储数据，以label为key
         for i in range(start + 2, len(self.lines)):
             item = self.lines[i].split(",")
             for j in range(length):
@@ -103,10 +101,19 @@ class AbstractTechnique:
         curXLabel, curYLabel
         curXCarry，curYCarry：当前数据的进位
         self.xKey, self.xUnit, self.yKey, self.yUnit
+        curves
         可重写。部分测试技术label显示文字会有不同
+        注意，curves[0]必须为所有数据连续的曲线
         :return:
 
         """
+    def parseAnalyseParams(self):
+        """
+        可选，解析分析参数。大部分测试技术此部分的解析在parseParams中就能完成
+        如acv，分析参数的解析依赖数据所有数据，于是在parseParams后设置此步骤以解析此类数据
+        :return:
+        """
+        pass
 
     def formatParameterTexts(self):
         """
@@ -156,12 +163,14 @@ class AbstractTechnique:
         plotWidget.showGrid(x=True, y=True)
         plots = []
         for i in range(0, len(self.curves)):
+            if i == 0 and len(self.curves) > 1:  # 若有切分的segment，则不显示i=0的曲线，即主曲线
+                continue
             pen = pg.mkPen(color=randomColor(), width=3)
             x, y = self.curves[i]['x'], self.curves[i]['y']
-            plot = plotWidget.plot(x, y, pen=pen, name='curve {}'.format(i + 1))
+            plot = plotWidget.plot(x, y, pen=pen, name='segment {}'.format(i))
             plot.setSymbolSize(8)
             plots.append(plot)
-        return plotWidget, plots  # 组件和主曲线
+        return plotWidget, plots  # 组件和曲线对象
 
     def showPoints(self, flag: bool):
         # 显示/隐藏原始数据点
@@ -176,33 +185,29 @@ class AbstractTechnique:
         """
 
     def smooth(self, window_length, polyorder, name):
-        for i in range(0, len(self.curves)):
-            pen = pg.mkPen(width=2, color=randomColor())
-            curve = self.curves[i]
-            x, y = curve['x'], dp.smooth(curve['x'], curve['y'], window_length, polyorder)
-            self.plotWidget.plot(x, y, name="{}. curve {}".format(name, i + 1), pen=pen)
+        pen = pg.mkPen(width=2, color=randomColor())
+        curve = self.curves[0]
+        x, y = curve['x'], dp.smooth(curve['x'], curve['y'], window_length, polyorder)
+        self.plotWidget.plot(x, y, name="{} of main curve".format(name), pen=pen)
 
     def n_derivative(self, deg: int):
-        for i in range(0, len(self.curves)):
-            pen = pg.mkPen(width=2, color=randomColor())
-            curve = self.curves[i]
-            x, y = curve['x'], dp.n_derivative(curve['x'], curve['y'], deg)
-            self.plotWidget.plot(x, y, name='{}rd Order Derivative. curve {}'.format(deg, i + 1), pen=pen)
+        pen = pg.mkPen(width=2, color=randomColor())
+        curve = self.curves[0]
+        x, y = curve['x'], dp.n_derivative(curve['x'], curve['y'], deg)
+        self.plotWidget.plot(x, y, name='{}rd Order Derivative of main curve'.format(deg), pen=pen)
 
     def integrate(self, name: str):
-        for i in range(0, len(self.curves)):
-            pen = pg.mkPen(width=2, color=randomColor(), cosmetic=True)
-            curve = self.curves[i]
-            x, y = curve['x'], dp.integrate_trapezoid(curve['x'], curve['y']) \
-                if name == 'trapezoid' else dp.integrate_simpson(curve['x'], curve['y'])
-            self.plotWidget.plot(x, y, name="{}. curve {}".format(name, i + 1), pen=pen)
+        pen = pg.mkPen(width=2, color=randomColor(), cosmetic=True)
+        curve = self.curves[0]
+        x, y = curve['x'], dp.integrate_trapezoid(curve['x'], curve['y']) \
+            if name == 'trapezoid' else dp.integrate_simpson(curve['x'], curve['y'])
+        self.plotWidget.plot(x, y, name="{} of main curve".format(name), pen=pen)
 
     def interpolate(self, density: int):
-        for i in range(0, len(self.curves)):
-            pen = pg.mkPen(width=2, color=randomColor())
-            curve = self.curves[i]
-            x, y = curve['x'], dp.interpolate(curve['x'], curve['y'], density)
-            self.plotWidget.plot(x, y, name='B-Spline插值. curve {}'.format(i + 1), pen=pen)
+        pen = pg.mkPen(width=2, color=randomColor())
+        curve = self.curves[0]
+        x, y = curve['x'], dp.interpolate(curve['x'], curve['y'], density)
+        self.plotWidget.plot(x, y, name='B-Spline interpolate of main curve', pen=pen)
 
     def baseline_fit(self, deg, algorithm, difference: bool):
         """
@@ -212,16 +217,15 @@ class AbstractTechnique:
         :param difference: 显示差值与否
         :return:
         """
-        for i in range(0, len(self.curves)):
-            pen = pg.mkPen(width=2, color=randomColor())
-            curve = self.curves[i]
-            if algorithm == '最小二乘':
-                x, y = dp.lsq_fit(curve['x'], curve['y'], deg)
-            elif algorithm == '正则化最小二乘':
-                x, y = dp.ols_fit(curve['x'], curve['y'], deg)
-            else:
-                raise ValueError("不存在此类拟合算法")
-            if difference:
-                # todo 显示与原数据之差
-                pass
-            self.plotWidget.plot(x, y, name="{}({}阶). curve {}".format(algorithm, deg, i + 1), pen=pen)
+        pen = pg.mkPen(width=2, color=randomColor())
+        curve = self.curves[0]
+        if algorithm == '最小二乘':
+            x, y = dp.lsq_fit(curve['x'], curve['y'], deg)
+        elif algorithm == '正则化最小二乘':
+            x, y = dp.ols_fit(curve['x'], curve['y'], deg)
+        else:
+            raise ValueError("不存在此类拟合算法")
+        if difference:
+            # todo 显示与原数据之差
+            pass
+        self.plotWidget.plot(x, y, name="{}({}阶) of main curve".format(algorithm, deg), pen=pen)

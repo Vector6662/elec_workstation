@@ -16,7 +16,7 @@ from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 
 import gui.handlers as handlers
 from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
-    InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget
+    InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget, GraphicOptionWidget
 import techniques.interface
 import techniques.implements
 import techniques.dataprocess as dp
@@ -31,7 +31,7 @@ class MainWindow(QMainWindow):
         self.popoutRef = None  # 当前弹出的窗口
         self.errInfoWidget = ErrorInfoWidget()  # 暂时错误信息
         self.technique = None
-        self.dataModifyWindow = None  # 数据点修改子窗口
+        self.dataModifyWindow = {}  # 数据点修改子窗口
 
         self.setWindowTitle("Ch660D电化学工作站")
         self.resize(1600, 900)
@@ -114,11 +114,20 @@ class MainWindow(QMainWindow):
             'action_dp_fourier_spectrum': ['', '傅里叶频谱', 'Fourier Spectrum', False, None],  # 傅里叶频谱
 
             'action_show_points': ['', '显示数据点', 'show points', True, self.onShowPoints],
+            'action_graphic_option': ['', '图形选项', 'graphic options', False, self.onGraphicOption],
+            'action_current_data_graph': ['', '当前数据图', 'current data graph', False, self.onCurrentDataGraph],
+            'action_overlay_plotting': ['', '叠加作图', 'overlay plotting', False, self.onOverlayPlotting],
+            'action_tiling_plotting': ['', '平铺作图', 'tiling plotting', False, self.onTilingPlotting],
+            'action_copy_to_clipboard': ['', '复制到剪切板', 'copy to clipboard', False, self.onCopyToClipboard],
+            'action_clear_plot': ['', '清空图像', 'clean plot', False, self.onCleanPlot],
+
             'action_data_list': ['', '数据列表', 'data lists', False, self.onDataList],
             'action_data_info': ['', '数据信息', 'data information', False, self.onDataInfo],
             'action_clock': ['', '时钟', 'clock', False, self.onClock],
-            'action_new_window': ['', '新窗口', 'new window', False, self.onNewWindow]
+            'action_new_window': ['', '新窗口', 'new window', False, self.onNewWindow],
 
+            'action_help_topic': ['', '关于主题', 'help topic', False, self.onHelpTopic],
+            'action_about': ['', '关于软件', 'about', False, self.onAbout]
         }
         self.actions = {}
         for key in actions_dict:
@@ -162,7 +171,16 @@ class MainWindow(QMainWindow):
 
         # graphic
         graphic_menu = menu.addMenu("图像(&G)")
+        graphic_menu.addAction(self.actions['action_current_data_graph'])
+        graphic_menu.addAction(self.actions['action_overlay_plotting'])
+        graphic_menu.addAction(self.actions['action_tiling_plotting'])
+        graphic_menu.addSeparator()
+        graphic_menu.addAction(self.actions['action_clear_plot'])
         graphic_menu.addAction(self.actions['action_show_points'])
+        graphic_menu.addSeparator()
+        graphic_menu.addAction(self.actions['action_graphic_option'])
+        graphic_menu.addSeparator()
+        graphic_menu.addAction(self.actions['action_copy_to_clipboard'])
 
         # data process
         data_menu = menu.addMenu("数据处理(&D)")
@@ -189,6 +207,8 @@ class MainWindow(QMainWindow):
 
         # help
         help_menu = menu.addMenu("帮助(&H)")
+        help_menu.addAction(self.actions['action_help_topic'])
+        help_menu.addAction(self.actions['action_about'])
 
         return menu
 
@@ -275,12 +295,7 @@ class MainWindow(QMainWindow):
         if vb.mapSceneToView(evt.scenePos()):
             point = vb.mapSceneToView(evt.scenePos())
             x, y = round(point.x(), 4), round(point.y(), 4)
-            # print('click:', "x={}V, y={}A".format(x, y))
-            if self.dataModifyWindow is None:
-                self.dataModifyWindow = DataModifyWindow(x, y, self)
-            else:
-                self.dataModifyWindow.showData(x, y)
-        # print('onMouseClicked: ', type(evt), 'scene pos:', evt.scenePos(), 'pos:', evt.pos())
+            self.dataModifyWindow[(x, y)] = DataModifyWindow(x, y, self)
 
     def onNew(self):
         # 新建
@@ -345,6 +360,32 @@ class MainWindow(QMainWindow):
     def onShowPoints(self, state):
         # 显示/隐藏原始数据点
         self.technique.showPoints(state)
+
+    def onGraphicOption(self):
+        if self.technique is None or self.centralWidget() is None:
+            self.errInfoWidget.showInfo("暂无数据输入!")
+            return
+        self.popoutRef = GraphicOptionWidget(self, self.technique.basicParams, self.technique.additionalParams,
+                                             self.technique.analyseParams, self.technique.mainPlots)
+        self.popoutRef.show()
+
+    def onCurrentDataGraph(self):
+        for plot in self.technique.mainPlots:
+            self.technique.plotWidget.addItem(plot)  # 这里应该不需要判断item已经存在，因为addItem源码最开始就会帮忙判断，若有则抛出waring并返回，我这里就偷下懒不判断了
+
+    def onOverlayPlotting(self):
+        pass
+
+    def onTilingPlotting(self):
+        pass
+
+    def onCopyToClipboard(self):
+        pass
+
+    def onCleanPlot(self):
+        if self.technique.plotWidget is None:
+            return
+        self.technique.plotWidget.clear()
 
     def onCloseFile(self):
         widget = self.centralWidget()
@@ -429,5 +470,11 @@ class MainWindow(QMainWindow):
         # current_work_dir = os.path.dirname(__file__)
         # path = os.path.join(current_work_dir[:-4], 'main.py')
         # execfile(path)
-        self.c = MainWindow()
-        self.c.show()
+        self.windowRef = MainWindow()
+        self.windowRef.show()
+
+    def onHelpTopic(self):
+        pass
+
+    def onAbout(self):
+        pass
