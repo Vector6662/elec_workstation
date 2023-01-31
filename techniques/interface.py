@@ -1,28 +1,32 @@
 import random
 import string
 import math
+import warnings
 
+import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QHBoxLayout, QPushButton, QLineEdit, QComboBox, \
     QListWidget, QListWidgetItem, QGridLayout, QCheckBox
 import techniques.dataprocess as dp
-from uitls import randomColor
+from dataprocess.loss_eval import evaluate
+from uitls import randomColor, parseBasicParamsHelper, defaultAdditionalParamsHelper, parseCurveHelper
 
 
 class AbstractTechnique:
     def __init__(self, parent, lines, file_name, file_type):
-        self.lines = lines
+        """
+
+        :param parent:
+        :param lines: 为None或''时创建一个空对象
+        :param file_name:
+        :param file_type:
+        """
+        if lines is None or len(lines) == 0:  # 此参数传空用来构造一个空对象
+            return
+        self.lines, self.file_name, self.file_type = lines, file_name, file_type
         # 解析基础参数
-        self.basicParams = {
-            'date': self.lines[0],
-            'techniqueName': self.lines[1],  # 测试技术名称
-            'file': "{} ({})".format(file_name.split("/")[-1], file_name),
-            'dataSource': self.lines[3].split(":")[1],
-            'instrumentModel': self.lines[4].split(":")[1],
-            'header': self.lines[5].split(":")[1],
-            'note': self.lines[6].split(":")[1]
-        }
+        self.basicParams = {}
         # 各测试技术实验附加参数、分析参数
         self.additionalParams = {}  # 附加参数
         self.analyseParams = {}  # 分析参数
@@ -37,15 +41,20 @@ class AbstractTechnique:
 
         # 以下是模板方法，解析以上属性，均可重写
         labelStartIndex = self.parseParams()
+        # 解析采集数据和曲线
         self.parseData(labelStartIndex)
-        self.parseAnalyseParams()
         self.parseCurrentCurves()
+        # 分析参数
+        self.parseAnalyseParams()
 
         # 初始化主界面各个部件
         self.parameterWidget = self.initParameterWidget()
         self.plotWidget, self.mainPlots = self.initPlotWidget()
         # 展示坐标
         self.positionWidget = QLabel(objectName='Position')
+
+        # 数据处理时产生的曲线，以AbstractTechnique对象存储，方便后续持久化。初始化为类自己
+        self.childTechniqueDict = {'main curve': self}
 
     def parseParams(self) -> int:
         """
@@ -54,7 +63,10 @@ class AbstractTechnique:
         analyseParams：分析参数字典，也是每种测试技术特定参数。有些测试技术（如acv）此过程的解析依赖所有数据，因此在此之后需要在完成parseAnalyseParams方法的重写
         :return: label start index. label在文件行中的地址
         """
-        pass
+        self.basicParams, additionalStart = parseBasicParamsHelper(self.lines, self.file_name)
+        self.additionalParams, labelStartIndex = defaultAdditionalParamsHelper(self.lines, additionalStart)
+        # 分析参数在parseAnalyseParams完成
+        return labelStartIndex
 
     def parseData(self, start):
         labels = []
@@ -107,6 +119,13 @@ class AbstractTechnique:
         :return:
 
         """
+        labels = list(self.dataDict.keys())
+        self.curX, self.curY, self.curXCarry, self.curYCarry, self.curXLabel, self.curYLabel \
+            = parseCurveHelper(self.dataDict, self.carryDict, labels[0], labels[1])
+        self.xKey, self.xUnit, self.yKey, self.yUnit = 'X', '', 'Y', ''
+
+        self.curves.append({'x': self.curX, 'y': self.curY})
+
     def parseAnalyseParams(self):
         """
         可选，解析分析参数。大部分测试技术此部分的解析在parseParams中就能完成
@@ -120,8 +139,8 @@ class AbstractTechnique:
         根据不同测试技术，可重写，这里给出的是通用的解析方式
         :return:
         """
-        basicText = "{}\nTech: {}\nFile: {}".format(self.basicParams['date'], self.basicParams['techniqueName'],
-                                                    self.basicParams['file'])
+        basicText = "{}\nTech: {}\nFile: {}".format(self.basicParams['Date'], self.basicParams['TechniqueName'],
+                                                    self.basicParams['File'])
         additionalText = ""
         for key in self.additionalParams:
             additionalText += "{} = {}\n".format(key, self.additionalParams[key])
@@ -177,12 +196,76 @@ class AbstractTechnique:
         for plot in self.mainPlots:
             plot.setSymbol('o') if flag else plot.setSymbol(None)
 
-    def getCur(self) -> (string, list, string, list):
+    def wrap(self, x: list, y: list, dataProcName=None, xLabelName=None, yLabelName=None):
         """
-        可能需要重写
-        当前label以及数据
+        封装一个当前类的深拷贝，并封装新数据。适用于持久化数据处理结果之前的操作
         :return:
         """
+        # 尝试使用深拷贝，但对象中有QWidget类型的实例，应该是不能被拷贝的，有报错：TypeError: cannot pickle 'QWidget' object
+        # import copy
+        # technique = copy.deepcopy(self)
+        # 拷贝
+        technique = AbstractTechnique(None, None, None, None)
+        technique.basicParams = self.basicParams.copy()
+        technique.additionalParams = self.additionalParams.copy()
+        technique.analyseParams = self.analyseParams.copy()
+
+        del technique.basicParams['Header']
+        del technique.basicParams['Note']
+        if dataProcName is not None:
+            technique.basicParams['Data Proc'] = dataProcName
+        technique.basicParams['Header'], technique.basicParams['Note'] \
+            = self.basicParams['Header'], self.basicParams['Note']
+
+        labels = list(self.dataDict.keys())
+        xLabelName = labels[0] if xLabelName is None else xLabelName
+        yLabelName = labels[1] if yLabelName is None else yLabelName
+
+        xCarry, yCarry = self.carryDict[xLabelName], self.carryDict[yLabelName]
+        x, y = np.multiply(np.round(x, 3), np.power(10.0, xCarry)), np.multiply(np.round(y, 3), np.power(10.0, yCarry))
+        technique.dataDict = {
+            xLabelName: x, yLabelName: y
+        }
+        return technique
+
+    def persist(self, file_path: str):
+        lines, index = [], 0
+        # 基础参数
+        for key in self.basicParams:
+            v = self.basicParams[key]
+            lines.append(v + '\n' if key == 'Date' or key == 'TechniqueName' else "{}: {}\n".format(key, v))
+        lines.append('\n')
+        # 附加参数
+        for key in self.additionalParams:
+            v = self.additionalParams[key]
+            lines.append("{} = {}\n".format(key, v))
+        lines.append('\n')
+        # 分析参数
+        for key in self.analyseParams:
+            v = self.analyseParams[key]
+            lines.append("{} = {}\n".format(key, v))
+        lines.append('\n')
+        # 数据列表项
+        dataLabels = list(self.dataDict.keys())
+        lines.append(', '.join(dataLabels) + '\n')
+        lines.append('\n')
+        # 数据列
+        for i in range(len(self.dataDict[dataLabels[0]])):
+            item = []
+            for key in self.dataDict.keys():
+                item.append(str(self.dataDict[key][i]))
+            lines.append(', '.join(item) + '\n')
+        # 写入文件
+        f = None
+        try:
+            f = open(file_path, 'w')
+            f.writelines(lines)
+        except:
+            warnings.warn('写入文件失败')
+            return
+        finally:
+            if f:
+                f.close()
 
     def smooth(self, window_length, polyorder, name):
         pen = pg.mkPen(width=2, color=randomColor())
@@ -215,7 +298,7 @@ class AbstractTechnique:
         :param deg: 拟合阶数
         :param algorithm: 拟合算法
         :param difference: 显示差值与否
-        :return:
+        :return:拟合后的x,y，返回用于评估误差
         """
         pen = pg.mkPen(width=2, color=randomColor())
         curve = self.curves[0]
@@ -225,7 +308,18 @@ class AbstractTechnique:
             x, y = dp.ols_fit(curve['x'], curve['y'], deg)
         else:
             raise ValueError("不存在此类拟合算法")
+        Y = y
         if difference:
-            # todo 显示与原数据之差
-            pass
-        self.plotWidget.plot(x, y, name="{}({}阶) of main curve".format(algorithm, deg), pen=pen)
+            curveName, y = 'fit subtraction of main curve({} order, {})'.format(deg, algorithm), np.subtract(self.curY,
+                                                                                                             y)
+        else:
+            curveName = "{}({} order) of main curve".format(algorithm, deg)
+        self.plotWidget.plot(x, y, name=curveName, pen=pen)
+        self.childTechniqueDict[curveName] = self.wrap(x, y, 'Baseline Fit')
+        return x, Y
+
+    def background_subtraction(self, x, y, file_name):
+        # todo 校验x和curX是否相同，否 则
+        subtract_y = np.subtract(self.curY, y)
+        self.plotWidget.plot(self.curX, subtract_y, name='background subtraction with {}'.format(file_name),
+                             pen=pg.mkPen(width=2, color=randomColor()))

@@ -134,6 +134,12 @@ https://blog.csdn.net/sunxmwebstudy/article/details/112762625 实现功能不少
 
 
 
+### 误差指标
+
+https://cloud.tencent.com/developer/article/2028633
+
+
+
 
 
 ## Aurora安装

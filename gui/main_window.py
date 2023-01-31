@@ -1,26 +1,16 @@
-import os
+import warnings
 
-from PyQt5.QtCore import QFile, Qt
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
-    QMainWindow, QMenu, QAction, QStatusBar, QMenuBar, QLabel, QVBoxLayout, QStackedLayout,
-    QWidget, QMdiArea, QMdiSubWindow, QTextEdit, QFileDialog, QHBoxLayout, QGridLayout, QToolBar, QCheckBox,
-    QPushButton, QDialog
+    QMainWindow, QAction, QStatusBar, QMenuBar, QVBoxLayout, QWidget, QFileDialog, QGridLayout, QToolBar, QPushButton
 )
-from PyQt5.QtGui import QIcon, QColor, QPalette, QFont, QKeySequence
-
-import PyQt5
-import pyqtgraph as pg
-import numpy as np
-from past.builtins import execfile
 from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 
-import gui.handlers as handlers
-from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
-    InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget, GraphicOptionWidget
-import techniques.interface
 import techniques.implements
-import techniques.dataprocess as dp
-import math
+import techniques.interface
+from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
+    InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget, GraphicOptionWidget, \
+    BackgroundSubtractionWidget, PersistCurveWidget
 
 
 class MainWindow(QMainWindow):
@@ -55,9 +45,9 @@ class MainWindow(QMainWindow):
         self.setMouseTracking(True)
 
         # 初始状态下的widget，点击后打开文件
-        self.initWidget()
+        self.generateInitWidget()
 
-    def initWidget(self):
+    def generateInitWidget(self):
         """
         初始界面，仅有”打开文件“和”开始实验“提示
         :return:
@@ -87,9 +77,11 @@ class MainWindow(QMainWindow):
             'action_new': ['icons/new.svg', "新建", "new", False, self.onNew],
             'action_openfile': ["icons/opendir.svg", "打开", 'open file', False, self.onOpenfile],
             'action_closefile': ['', '关闭', 'close file', False, self.onCloseFile],
+            'action_deletefile': ['', '删除', 'delete file', False, self.onDeleteFile],
             'action_exit': ['', '退出', 'exit', False, self.onExit],
             'action_savefile': ['icons/save.svg', '另存为', 'save', False, self.onSavefile],
             'action_print': ['icons/print.svg', '打印', "print", False, self.onPrint],
+
             'action_technique': ['icons/technique.svg', '实验技术', "technique", False, self.onTechnique],
             'action_exp_params': ['icons/experparams.svg', "实验参数", 'experimental params', False, self.onExpParams],
             'action_run_exper': ['icons/run.svg', '运行实验', 'run experiment', False, self.onRunExper],
@@ -97,14 +89,13 @@ class MainWindow(QMainWindow):
             'action_terminate_exper': ['icons/pause.svg', '终止实验', 'terminate', False, self.onTerminateExper],
             'action_reverse_scan': ['icons/reversescan.svg', '反向扫描', 'reverse scan', False, self.onReverseScan],
             'action_zero_current': ['icons/zerocurrent.svg', 'Zero Current', 'Zero Current', False, self.onZeroCurrent],
+
             'action_dp_smooth': ['', '数据平滑', 'Smoothing', False, None],  # 平滑
             'action_dp_deriv': ['', '导数', 'Derivatives', False, None],  # 导数
             'action_dp_integrate': ['', '积分', 'Integration', False, None],  # 积分
             'action_dp_semi': ['', '半微分和半积分', 'Semiinteg and Semideriv', False, None],  # 半微分和半积分
             'action_dp_interpolate': ['', '插值', 'Interpolation', False, None],  # 插值
             'action_dp_baseline_fitting': ['', '基线拟合和扣除', 'Baseline Fitting & Subtraction', False, None],
-            # 基线拟合和扣除
-
             'action_dp_baseline_correction': ['', '线性基线修正', 'Linear Baseline Correction', False, None],  # 线性基线修正
             'action_dp_datapoint_remove': ['', '数据点移除', 'Data Point Removing', False, None],  # 数据点移除
             'action_dp_datapoint_modify': ['', '数据点修改', 'Data Point Modifying', False, None],  # 数据点修改
@@ -148,8 +139,11 @@ class MainWindow(QMainWindow):
         # File
         file_menu = menu.addMenu("文件(&F)")
 
+        file_menu.addAction(self.actions['action_new'])
         file_menu.addAction(self.actions['action_openfile'])
         file_menu.addAction(self.actions['action_closefile'])
+        file_menu.addAction(self.actions['action_savefile'])
+        file_menu.addAction(self.actions['action_deletefile'])
         file_menu.addSeparator()
         for i in range(0, len(self.recentOpen)):
             path = self.recentOpen[i]
@@ -274,8 +268,6 @@ class MainWindow(QMainWindow):
             f.write(text)
 
     def onMouseMoved(self, evt):  # event是window的，而不是widget的，似乎没有widget会有event
-        # print('onMouseMoved: ', type(evt), evt.x(), evt.y())
-
         vb = self.technique.plotWidget.getPlotItem().vb
         if vb.mapSceneToView(evt):
             point = vb.mapSceneToView(evt)
@@ -309,41 +301,61 @@ class MainWindow(QMainWindow):
             return
         path = evt.text().split(" ")[1]
         file_type = path.split(".")[-1]
-        self.parse(path, file_type)
+        self.generateMainWidget(path, file_type)
 
     def onOpenfile(self):
-        file_name, file_type = QFileDialog.getOpenFileName(self, "选取目录", "./", "Files (*.txt *.bin)")
-        if file_name is None or len(file_name) == 0:
-            TypeError('error on open file.')
+        file_path, file_type = QFileDialog.getOpenFileName(self, "选取数据文件", "./", "Files (*.txt *.bin)")
+        if file_path is None or len(file_path) == 0:
+            warnings.warn('error on open file.')
             return
-        self.parse(file_name, file_type)
+        self.generateMainWidget(file_path, file_type)
 
-    def parse(self, file_name, file_type):
+    def parseFile(self, file_path, file_type):
         """
-        解析主界面数据
-        :return:
+
+        :param file_path:
+        :param file_type:
+        :return: 解析出的technique对象；file_data 目前在数据列表上使用，显示文件整体数据
         """
         f, file_data = None, None
         try:
-            f = open(file_name, "r")
+            f = open(file_path, "r")
             file_data = f.read()
         except:
+            warnings.warn('文件路径错误：找不到该文件')
             self.errInfoWidget.showInfo("文件路径错误：找不到该文件")
             return
         finally:
             if f:
                 f.close()
+        if len(file_data) == 0:
+            self.errInfoWidget.showInfo('文件无数据')
+            return
 
         lines = file_data.splitlines()
 
-        self.recentOpen.append(file_name)  # 成功打开后记录
-        self.file_data = file_data
-        technique = lines[1]
-        self.technique = techniques.implements.techniqueDict[technique](self, lines, file_name, file_type)
+        techniqueName = lines[1]
+        # 找不到任何类型用抽象类解析
+        if techniqueName not in techniques.implements.techniqueDict:
+            technique = techniques.interface.AbstractTechnique(self, lines, file_path, file_type)
+        else:
+            technique = techniques.implements.techniqueDict[techniqueName](self, lines, file_path, file_type)
+        return technique, file_data
+
+    def generateMainWidget(self, file_path, file_type):
+        """
+        创建主界面，包括图像区域和参数区域，以及坐标区域
+        :param file_path:
+        :param file_type:
+        :return:
+        """
+        self.technique, self.file_data = self.parseFile(file_path, file_type)  # 解析出的technique对象；目前在数据列表上使用，显示文件整体数据
+        self.recentOpen.append(file_path)  # 成功打开后记录
 
         self.technique.plotWidget.scene().sigMouseMoved.connect(self.onMouseMoved)  # 目前觉得只有window才能够监听鼠标事件
         self.technique.plotWidget.scene().sigMouseClicked.connect(self.onMouseClicked)
 
+        # 主界面初始化
         layout = QGridLayout()
 
         rightLayout = QVBoxLayout()  # 主界面右侧，展示实验参数
@@ -392,14 +404,18 @@ class MainWindow(QMainWindow):
         if widget is None:
             return
         widget.close()
-        self.initWidget()
+        self.generateInitWidget()
         self.technique = None
+
+    def onDeleteFile(self):
+        pass
 
     def onExit(self):
         self.close()
 
     def onSavefile(self):
-        pass
+        self.popoutRef = PersistCurveWidget(self)
+        self.popoutRef.show()
 
     def onPrint(self):
         pass
@@ -440,7 +456,7 @@ class MainWindow(QMainWindow):
         return {
             '数据平滑': SmoothWidget, '导数': DerivativeWidget, '积分': IntegrateWidget,
             '半积分和半微分': None, '插值': InterpolateWidget, '基线拟合和扣除': BaselineFitWidget,
-            '线性基线修正': None, '数据点删除': None, '背景扣除': None,
+            '线性基线修正': None, '数据点删除': None, '背景扣除': BackgroundSubtractionWidget,
             '信号平均': None, '数学运算': None, '傅里叶频谱': None,
         }
 

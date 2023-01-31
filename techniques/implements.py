@@ -1,22 +1,12 @@
 from techniques.interface import AbstractTechnique
 import string
 
-from uitls import parseParamHelper, parseCurveHelper
+from uitls import defaultAdditionalParamsHelper, parseCurveHelper, parseBasicParamsHelper, parseAdditionalParamsHelper
 
 
 class ACV(AbstractTechnique):  # A.C. Voltammetry
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
-
-    def parseParams(self):
-        self.additionalParams = parseParamHelper(self.lines, 8, 16)
-        # 分析参数在parseAnalyseParams完成
-        return 17
-
-    def parseAnalyseParams(self):
-        self.analyseParams = {
-            'Ep': self.ep(), 'Eh': self.eh(), 'Hpw': self.hpw(), 'Ap': self.ap()
-        }
 
     def parseCurrentCurves(self):
         labels = list(self.dataDict.keys())
@@ -25,6 +15,15 @@ class ACV(AbstractTechnique):  # A.C. Voltammetry
         self.xKey, self.xUnit, self.yKey, self.yUnit = 'E', 'V', 'i', 'A'
 
         self.curves.append({'x': self.curX, 'y': self.curY})
+
+    def formatParameterTexts(self):
+        basicText = "{}\nTech: {}\nFile: {}".format(self.basicParams['Date'], self.basicParams['TechniqueName'],
+                                                    self.basicParams['File'])
+        additionalText = ""
+        for key in self.additionalParams:
+            additionalText += "{} = {}\n".format(key, self.additionalParams[key])
+        analysisText = "ep = {}\neh = {}\nhpw = {}".format(self.ep(), self.eh(), self.hpw())
+        return basicText, additionalText, analysisText
 
     def ep(self):
         return '0.208V'
@@ -44,8 +43,8 @@ class BEL(AbstractTechnique):  # Bulk Electrolysis with Coulometry
         super().__init__(parent, lines, file_name, file_type)
 
     def parseParams(self):
-        self.additionalParams = parseParamHelper(self.lines, 8, 11)
-        self.analyseParams = parseParamHelper(self.lines, 12, 14)
+        self.basicParams, additionalStart = parseBasicParamsHelper(self.lines, self.file_name)
+        self.additionalParams = parseAdditionalParamsHelper(self.lines, additionalStart, 6)
         return 15
 
 
@@ -54,7 +53,7 @@ class CC(AbstractTechnique):  # Chronocoulometry
         super().__init__(parent, lines, file_name, file_type)
 
     def parseParams(self):
-        self.additionalParams = parseParamHelper(self.lines, 8, 15)
+        self.additionalParams = parseAdditionalParamsHelper(self.lines, 8, 15)
         self.analyseParams = {
             'F_Slp': self.lines[17].split("=")[1],
             'F_Int': self.lines[18].split("=")[1],

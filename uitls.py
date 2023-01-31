@@ -1,18 +1,61 @@
 import random
 
 
-def parseParamHelper(lines, start, end):
-    """
-    解析一般情况下的参数，给出区间即可解析。注意end是开区间，不包含
-    :return: additionalParams
-    """
-    # 解析additionalParams
+def parseAdditionalParamsHelper(lines, start, length):
     additionalParams = {}
-    for i in range(start, end):
+    for i in range(start, start + length):
         line = lines[i]
+        if len(line) == 0:
+            continue
         k, v = line.split("=")[0].strip(), line.split("=")[1].strip()
         additionalParams[k] = v
     return additionalParams
+
+
+def defaultAdditionalParamsHelper(lines, start):
+    """
+    解析直到空行
+    :param lines:
+    :param start:
+    :return: 附加参数字典，labelStartIndex
+    """
+    # 解析additionalParams
+    additionalParams = {}
+    labelStartIndex = start
+    for i in range(start, len(lines)):
+        line = lines[i]
+        if len(line) == 0:
+            labelStartIndex = i
+            break
+        k, v = line.split("=")[0].strip(), line.split("=")[1].strip()
+        additionalParams[k] = v
+    # 有可能出现的情况是两行空格，需要跳过
+    while len(lines[labelStartIndex]) == 0:
+        labelStartIndex += 1
+    return additionalParams, labelStartIndex
+
+
+def parseBasicParamsHelper(lines: list, file_path: str):
+    """
+    数据处理生成的数据文件会在基础参数里多出Data Proc，需要判别一下
+    :param lines:
+    :param file_path:
+    :return: basicParams解析结果，additionalParams开始位置
+    """
+    basicParams = {
+        'Date': lines[0],
+        'TechniqueName': lines[1],  # 测试技术名称
+        'File': file_path,
+        'DataSource': lines[3].split(":")[1].strip(),
+        'InstrumentModel': lines[4].split(":")[1].strip()
+    }
+    key, value = lines[5].split(":")[0], lines[5].split(":")[1]
+    if "Data Proc" in key:
+        basicParams[key] = value.strip()
+        basicParams['Header'], basicParams['Note'] = lines[6].split(":")[1], lines[7].split(":")[1]
+        return basicParams, 9
+    basicParams['Header'], basicParams['Note'] = lines[5].split(":")[1], lines[6].split(":")[1]
+    return basicParams, 8
 
 
 def formatLabel(text, carry):

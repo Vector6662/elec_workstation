@@ -1,11 +1,16 @@
+import warnings
+
 from IPython.external.qt_for_kernel import QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QHBoxLayout, QPushButton, QLineEdit, QComboBox, \
-    QListWidget, QListWidgetItem, QGridLayout, QCheckBox, QScrollArea
+    QListWidget, QListWidgetItem, QGridLayout, QCheckBox, QScrollArea, QFileDialog
 import pyqtgraph as pg
 import time
 from threading import Timer
+
+from dataprocess.loss_eval import evaluate
+from techniques.interface import AbstractTechnique
 
 
 class DataModifyWindow(QWidget):
@@ -299,13 +304,13 @@ class BaselineFitWidget(QWidget):
 
         # 峰底两侧 子layout
         mainLayout.addWidget(QLabel("峰底两侧", objectName='Title1'), 0, 0)
-        peeksWidget = QWidget()
-        self.peeksLayout = QVBoxLayout()
-        peeksWidget.setLayout(self.peeksLayout)
-        self.peekWidgetList = []  # 添加的peekWidget
-        self.peekWidgetList.append(self.addPeekWidget(0))
-        self.peeksLayout.addWidget(self.peekWidgetList[0])
-        mainLayout.addWidget(peeksWidget, 1, 0)
+        peaksWidget = QWidget()
+        self.peaksLayout = QVBoxLayout()
+        peaksWidget.setLayout(self.peaksLayout)
+        self.peakWidgetList = []  # 添加的peakWidget
+        self.peakWidgetList.append(self.addPeakWidget(0))
+        self.peaksLayout.addWidget(self.peakWidgetList[0])
+        mainLayout.addWidget(peaksWidget, 1, 0)
 
         # 基线拟合算法 子layout
         mainLayout.addWidget(QLabel('基线拟合算法', objectName='Title1'), 3, 0)
@@ -341,13 +346,19 @@ class BaselineFitWidget(QWidget):
         button.clicked.connect(self.onClick)
         mainLayout.addWidget(button, 0, 1)
         # 新增峰两侧按钮
-        addPeekButton = QPushButton('新增峰两侧')
-        mainLayout.addWidget(addPeekButton, 1, 1)
-        addPeekButton.clicked.connect(self.onAddPeek)
+        addPeakButton = QPushButton('新增峰两侧')
+        mainLayout.addWidget(addPeakButton, 1, 1)
+        addPeakButton.clicked.connect(self.onAddPeak)
+
+        # 误差评估
+        lossEvalBox = QCheckBox('拟合评估结果')
+        self.showLossEval = False
+        lossEvalBox.stateChanged.connect(self.onLossEvalState)
+        mainLayout.addWidget(lossEvalBox, 7, 0)
 
         self.setLayout(mainLayout)
 
-    def addPeekWidget(self, number: int):
+    def addPeakWidget(self, number: int):
         # 产生峰值范围选择的widget, number为编号
         widget = QWidget(self)
         widget.setStatusTip(str(number))
@@ -361,17 +372,21 @@ class BaselineFitWidget(QWidget):
         widget.setLayout(layout)
         return widget
 
-    def onClick(self):
-        difference = False
-        if self.confirm == '差值':
-            difference = True
-        self.parent.technique.baseline_fit(self.deg, self.algorithm, difference)
-        self.close()
+    def onLossEvalState(self, state):
+        self.showLossEval = state == Qt.Checked
 
-    def onAddPeek(self):
-        widget = self.addPeekWidget(len(self.peekWidgetList))
-        self.peekWidgetList.append(widget)
-        self.peeksLayout.addWidget(widget)
+    def onClick(self):
+        x, y = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值')
+
+        self.close()
+        if self.showLossEval:
+            self.parent.popoutRef = LossReportWidget(evaluate(self.parent.technique.curY, y))
+            self.parent.popoutRef.show()
+
+    def onAddPeak(self):
+        widget = self.addPeakWidget(len(self.peakWidgetList))
+        self.peakWidgetList.append(widget)
+        self.peaksLayout.addWidget(widget)
 
     def onAlgChoose(self, s: str):
         # 选择算法
@@ -383,6 +398,72 @@ class BaselineFitWidget(QWidget):
 
     def onConfirm(self, s):
         self.confirm = s
+
+
+class BackgroundSubtractionWidget(QWidget):
+    """
+    背景扣除
+    """
+
+    def __init__(self, parent):
+        super(BackgroundSubtractionWidget, self).__init__()
+        self.parent = parent
+        self.setWindowTitle('背景扣除')
+        self.file_path, self.file_type = None, None
+
+        self.showLossEval = False  # 是否显示误差评估结果
+
+        mainLayout = QGridLayout()
+        openFileBtn = QPushButton('选择文件')
+        openFileBtn.clicked.connect(self.onOpenFile)
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClick)
+
+        self.pathLabel = QLabel()
+
+        showLossEvalBox = QCheckBox('误差评估')
+        showLossEvalBox.stateChanged.connect(self.onCheck)
+
+        mainLayout.addWidget(openFileBtn, 0, 0)
+        mainLayout.addWidget(button, 0, 1)
+        mainLayout.addWidget(self.pathLabel, 1, 0)
+        mainLayout.addWidget(showLossEvalBox, 2, 0)
+
+        self.setLayout(mainLayout)
+
+    def onCheck(self, state):
+        self.showLossEval = state
+
+    def onOpenFile(self):
+        self.file_path, self.file_type = QFileDialog.getOpenFileName(self, "选取目录", "./", "Files (*.txt *.bin)")
+        if self.file_path is None or len(self.file_path) == 0:
+            warnings.warn('error on open file.')
+        self.pathLabel.setText(self.file_path)
+
+    def onClick(self):
+        if self.file_path is None or len(self.file_path) == 0:
+            self.parent.errInfoWidget.showInfo('尚未选择文件')
+            return
+        technique, file_data = self.parent.parseFile(self.file_path, self.file_type)
+        x, y = technique.curX, technique.curY
+        file_name = technique.file_name.split("/")[-1]
+        self.parent.technique.background_subtraction(x, y, file_name)
+        if self.showLossEval == Qt.Checked:
+            self.parent.popoutRef = LossReportWidget(evaluate(self.parent.technique.curY, y))
+            self.parent.popoutRef.show()
+        self.close()
+
+
+class LossReportWidget(QWidget):
+    def __init__(self, text):
+        super(LossReportWidget, self).__init__()
+        self.setWindowTitle('误差评估结果')
+
+        mainLayout = QHBoxLayout()
+        widget = QLabel(text)
+        mainLayout.addWidget(widget)
+        self.setLayout(mainLayout)
 
 
 class GraphicOptionWidget(QWidget):
@@ -564,3 +645,47 @@ class ClockWidget(QWidget):
     def task(self):
         self.label.setText(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
         Timer(1, self.task, ()).start()
+
+
+class PersistCurveWidget(QWidget):
+    """
+    持久化曲线数据
+    """
+
+    def __init__(self, parent):
+        super(PersistCurveWidget, self).__init__()
+        self.setWindowTitle("持久化曲线")
+        self.parent = parent
+        self.techniqueDict = self.parent.technique.childTechniqueDict
+        mainLayout = QGridLayout()
+
+        infoLabel = QLabel('曲线选择')
+
+        curveBox = QComboBox()
+        self.curveName = ''
+        curveBox.addItems(list(self.techniqueDict.keys()))
+        curveBox.currentTextChanged.connect(self.onTextChanged)
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClick)
+
+        mainLayout.addWidget(infoLabel, 0, 0)
+        mainLayout.addWidget(curveBox, 1, 0)
+        mainLayout.addWidget(button, 0, 1)
+        self.setLayout(mainLayout)
+
+    def onClick(self):
+        if self.curveName not in self.techniqueDict:
+            self.parent.technique.errInfoWidget.showInfo('无此曲线')
+            self.close()
+            return
+        hint = ''
+        if 'Data Proc' in self.techniqueDict[self.curveName].basicParams:
+            hint = self.techniqueDict[self.curveName].basicParams['Data Proc'] + " unnamed"
+        filePath, fileType = QFileDialog.getSaveFileName(self, '保存路径', "./{}".format(hint),
+                                                         "text (*.txt);;binary (*.bin)")
+        self.techniqueDict[self.curveName].persist(filePath)
+        self.close()
+
+    def onTextChanged(self, s):
+        self.curveName = s
