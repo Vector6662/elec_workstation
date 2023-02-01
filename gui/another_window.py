@@ -9,7 +9,7 @@ import pyqtgraph as pg
 import time
 from threading import Timer
 
-from dataprocess.loss_eval import evaluate
+import dataprocess.loss_eval as loss_eval
 from techniques.interface import AbstractTechnique
 
 
@@ -349,6 +349,10 @@ class BaselineFitWidget(QWidget):
         addPeakButton = QPushButton('新增峰两侧')
         mainLayout.addWidget(addPeakButton, 1, 1)
         addPeakButton.clicked.connect(self.onAddPeak)
+        # 整体拟合效果评估，并画出拟合图像
+        evalAllButton = QPushButton('整体拟合效果评估')
+        evalAllButton.clicked.connect(self.onEvalAll)
+        mainLayout.addWidget(evalAllButton, 2, 1)
 
         # 误差评估
         lossEvalBox = QCheckBox('拟合评估结果')
@@ -357,6 +361,29 @@ class BaselineFitWidget(QWidget):
         mainLayout.addWidget(lossEvalBox, 7, 0)
 
         self.setLayout(mainLayout)
+
+    def onEvalAll(self):
+        self.close()
+        technique = self.parent.technique
+        key, xLabel, yLabel = 'MSE', 'Degree of Polynomial', 'Mean Squared Error'
+        title = '{} baseline fit (1-14 degree)'.format(technique.techniqueName)
+        x, y = [], []
+        for deg in range(1, 15):
+            techniqueName, dataDict = technique.baseline_fit(deg, '最小二乘', False)
+            evalResult, evalDict = technique.lossEval(techniqueName, '{} baseline fit({} degree)'.format(technique.techniqueName, deg))
+            x.append(deg)
+            y.append(evalDict[key])
+        loss_eval.baseline_fit_plot(x, y, title, xLabel, yLabel)
+
+    def onClick(self):
+        techniqueName, dataDict = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值')
+
+        self.close()
+        if self.showLossEval:
+            evalResult, _ = self.parent.technique.lossEval(techniqueName, '{} baseline fit({} degree)'.format(
+                self.parent.technique.techniqueName, self.deg))
+            self.parent.popoutRef = LossReportWidget(evalResult)
+            self.parent.popoutRef.show()
 
     def addPeakWidget(self, number: int):
         # 产生峰值范围选择的widget, number为编号
@@ -372,21 +399,13 @@ class BaselineFitWidget(QWidget):
         widget.setLayout(layout)
         return widget
 
-    def onLossEvalState(self, state):
-        self.showLossEval = state == Qt.Checked
-
-    def onClick(self):
-        x, y = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值')
-
-        self.close()
-        if self.showLossEval:
-            self.parent.popoutRef = LossReportWidget(evaluate(self.parent.technique.curY, y))
-            self.parent.popoutRef.show()
-
     def onAddPeak(self):
         widget = self.addPeakWidget(len(self.peakWidgetList))
         self.peakWidgetList.append(widget)
         self.peaksLayout.addWidget(widget)
+
+    def onLossEvalState(self, state):
+        self.showLossEval = state == Qt.Checked
 
     def onAlgChoose(self, s: str):
         # 选择算法
@@ -450,7 +469,7 @@ class BackgroundSubtractionWidget(QWidget):
         file_name = technique.file_name.split("/")[-1]
         self.parent.technique.background_subtraction(x, y, file_name)
         if self.showLossEval == Qt.Checked:
-            self.parent.popoutRef = LossReportWidget(evaluate(self.parent.technique.curY, y))
+            self.parent.popoutRef = LossReportWidget(loss_eval.evaluate(self.parent.technique.curY, y))
             self.parent.popoutRef.show()
         self.close()
 
@@ -461,7 +480,7 @@ class LossReportWidget(QWidget):
         self.setWindowTitle('误差评估结果')
 
         mainLayout = QHBoxLayout()
-        widget = QLabel(text)
+        widget = QLabel(text, objectName='Style1')
         mainLayout.addWidget(widget)
         self.setLayout(mainLayout)
 
@@ -471,7 +490,7 @@ class GraphicOptionWidget(QWidget):
     图形选项弹出窗口
     """
 
-    def __init__(self, parent, basicParams, additionalParams, analyseParams, mainPlots):
+    def __init__(self, parent, basicParams, additionalParams, mainPlots):
         super(GraphicOptionWidget, self).__init__()
         self.parent = parent
         self.setWindowTitle("图形选项")
@@ -595,10 +614,10 @@ class DataInfoWidget(QWidget):
         self.setWindowTitle("数据信息")
 
         content = "文件名: {}\n源: {}\n型号: {}\n日期: {}\nROM Vers: {}\nProg: {}\n" \
-            .format(self.parent.technique.basicParams['file'][:20],
-                    self.parent.technique.basicParams['dataSource'],
-                    self.parent.technique.basicParams['instrumentModel'],
-                    self.parent.technique.basicParams['date'], '', '')
+            .format(self.parent.technique.basicParams['File'].split("/")[-1],
+                    self.parent.technique.basicParams['Data Source'],
+                    self.parent.technique.basicParams['Instrument Model'],
+                    self.parent.technique.basicParams['Date'], '', '')
         widget = QLabel(content, objectName="Style1")
         mainLayout.addWidget(widget, 0, 0)
 

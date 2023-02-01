@@ -377,8 +377,7 @@ class MainWindow(QMainWindow):
         if self.technique is None or self.centralWidget() is None:
             self.errInfoWidget.showInfo("暂无数据输入!")
             return
-        self.popoutRef = GraphicOptionWidget(self, self.technique.basicParams, self.technique.additionalParams,
-                                             self.technique.analyseParams, self.technique.mainPlots)
+        self.popoutRef = GraphicOptionWidget(self, self.technique.basicParams, self.technique.additionalParams, self.technique.mainPlots)
         self.popoutRef.show()
 
     def onCurrentDataGraph(self):

@@ -1,16 +1,15 @@
-import random
-import string
 import math
+import re
 import warnings
 
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QHBoxLayout, QPushButton, QLineEdit, QComboBox, \
-    QListWidget, QListWidgetItem, QGridLayout, QCheckBox
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
+
+import dataprocess.loss_eval as loss_eval
 import techniques.dataprocess as dp
-from dataprocess.loss_eval import evaluate
-from uitls import randomColor, parseBasicParamsHelper, defaultAdditionalParamsHelper, parseCurveHelper
+from uitls import randomColor, parseBasicParamsHelper, parseCurveHelper, formatBasicParamsHelper
 
 
 class AbstractTechnique:
@@ -25,27 +24,26 @@ class AbstractTechnique:
         if lines is None or len(lines) == 0:  # 此参数传空用来构造一个空对象
             return
         self.lines, self.file_name, self.file_type = lines, file_name, file_type
-        # 解析基础参数
-        self.basicParams = {}
-        # 各测试技术实验附加参数、分析参数
+        self.techniqueName = self.file_name.split('/')[-1].split('.')[0] + '(main curve)'
+        # 解析参数
+        self.basicParams = {}  # 基础参数
         self.additionalParams = {}  # 附加参数
-        self.analyseParams = {}  # 分析参数
         # 数据
         self.carryDict = {}  # 每一个label的进位
         self.dataDict = {}
         # 当前曲线信息
         self.curX, self.curY, self.curXLabel, self.curYLabel = None, None, None, None
         self.curXCarry, self.curYCarry = None, None
-        self.xKey, self.xUnit, self.yKey, self.yUnit = None, None, None, None  # 坐标实时显示是的信息。如t=1.23s,Q=2.34e-1C
+        self.curXLabelAlias, self.curYLabelAlias = None, None  # 别名，用于坐标轴上显示标签
         self.curves = []
+        # 坐标实时显示是的信息。如t=1.23s,Q=2.34e-1C
+        self.xKey, self.xUnit, self.yKey, self.yUnit = None, None, None, None
 
         # 以下是模板方法，解析以上属性，均可重写
         labelStartIndex = self.parseParams()
         # 解析采集数据和曲线
         self.parseData(labelStartIndex)
         self.parseCurrentCurves()
-        # 分析参数
-        self.parseAnalyseParams()
 
         # 初始化主界面各个部件
         self.parameterWidget = self.initParameterWidget()
@@ -54,19 +52,27 @@ class AbstractTechnique:
         self.positionWidget = QLabel(objectName='Position')
 
         # 数据处理时产生的曲线，以AbstractTechnique对象存储，方便后续持久化。初始化为类自己
-        self.childTechniqueDict = {'main curve': self}
+        self.childTechniqueDict = {self.techniqueName: self}
 
     def parseParams(self) -> int:
         """
         解析数据过程，需要子类重写。需要解析以下属性
         additionalParams字典，即每种测试技术特定的参数
-        analyseParams：分析参数字典，也是每种测试技术特定参数。有些测试技术（如acv）此过程的解析依赖所有数据，因此在此之后需要在完成parseAnalyseParams方法的重写
         :return: label start index. label在文件行中的地址
         """
-        self.basicParams, additionalStart = parseBasicParamsHelper(self.lines, self.file_name)
-        self.additionalParams, labelStartIndex = defaultAdditionalParamsHelper(self.lines, additionalStart)
-        # 分析参数在parseAnalyseParams完成
-        return labelStartIndex
+        self.basicParams, start = parseBasicParamsHelper(self.lines, self.file_name)
+        # 解析附加参数
+        for i in range(start, len(self.lines)):
+            line = self.lines[i]
+            if len(line) == 0:
+                continue
+            if "/" in line and "," in line:
+                start = i
+                break
+            split = re.split(r'[:=]', line)
+            k, v = split[0].strip(), split[1].strip()
+            self.additionalParams[k] = v
+        return start
 
     def parseData(self, start):
         labels = []
@@ -108,57 +114,52 @@ class AbstractTechnique:
 
     def parseCurrentCurves(self):
         """
-        解析当前曲线数据，需要解析
-        curX, curY,
-        curXLabel, curYLabel
-        curXCarry，curYCarry：当前数据的进位
-        self.xKey, self.xUnit, self.yKey, self.yUnit
-        curves
-        可重写。部分测试技术label显示文字会有不同
+        可重写。部分测试技术坐标轴上显示可能不同显示文字会有不同
         注意，curves[0]必须为所有数据连续的曲线
         :return:
 
         """
-        labels = list(self.dataDict.keys())
-        self.curX, self.curY, self.curXCarry, self.curYCarry, self.curXLabel, self.curYLabel \
-            = parseCurveHelper(self.dataDict, self.carryDict, labels[0], labels[1])
-        self.xKey, self.xUnit, self.yKey, self.yUnit = 'X', '', 'Y', ''
+        self.defaultCurveParser()
+
+    def defaultCurveParser(self, cur_x_label=None, cur_y_label=None, x_key='X', x_unit='', y_key='Y', y_unit=''):
+        """
+        提供主曲线默认解析方案
+        :param cur_x_label: 
+        :param cur_y_label: 
+        :param x_key: 
+        :param x_unit: 
+        :param y_key: 
+        :param y_unit: 
+        :return: 
+        """
+        self.curXLabel, self.curYLabel = \
+            list(self.dataDict.keys())[0] if cur_x_label is None else cur_x_label, \
+            list(self.dataDict.keys())[1] if cur_y_label is None else cur_y_label
+        self.curX, self.curY, self.curXCarry, self.curYCarry, self.curXLabelAlias, self.curYLabelAlias \
+            = parseCurveHelper(self.dataDict, self.carryDict, self.curXLabel, self.curYLabel)
+        self.xKey, self.xUnit, self.yKey, self.yUnit = x_key, x_unit, y_key, y_unit
 
         self.curves.append({'x': self.curX, 'y': self.curY})
-
-    def parseAnalyseParams(self):
-        """
-        可选，解析分析参数。大部分测试技术此部分的解析在parseParams中就能完成
-        如acv，分析参数的解析依赖数据所有数据，于是在parseParams后设置此步骤以解析此类数据
-        :return:
-        """
-        pass
 
     def formatParameterTexts(self):
         """
         根据不同测试技术，可重写，这里给出的是通用的解析方式
         :return:
         """
-        basicText = "{}\nTech: {}\nFile: {}".format(self.basicParams['Date'], self.basicParams['TechniqueName'],
-                                                    self.basicParams['File'])
+        basicText = formatBasicParamsHelper(self.basicParams)
         additionalText = ""
         for key in self.additionalParams:
             additionalText += "{} = {}\n".format(key, self.additionalParams[key])
-
-        analysisText = ""
-        for key in self.analyseParams:
-            analysisText += "{} = {}\n".format(key, self.analyseParams[key])
-        return basicText, additionalText, analysisText
+        return basicText, additionalText
 
     def initParameterWidget(self) -> QWidget:
         # 初始化主界面右侧参数展示部件，初始化布局
-        basicText, additionalText, analysisText = self.formatParameterTexts()
+        basicText, additionalText = self.formatParameterTexts()
 
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignHCenter)
         layout.addWidget(QLabel(basicText, objectName='BasicParams'))
-        layout.addWidget(QLabel(additionalText, objectName='BasicParams'))
-        layout.addWidget(QLabel(analysisText, objectName='AdditionalParams'))
+        layout.addWidget(QLabel(additionalText, objectName='AdditionalParams'))
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -174,8 +175,8 @@ class AbstractTechnique:
         """
         plotWidget = pg.PlotWidget()  # 曲线展示
         styles = {'color': 'green', 'font-size': '30px', 'font-weight': '900'}
-        plotWidget.setLabel('left', self.curYLabel, **styles)
-        plotWidget.setLabel('bottom', self.curXLabel, **styles)
+        plotWidget.setLabel('bottom', self.curXLabelAlias, **styles)
+        plotWidget.setLabel('left', self.curYLabelAlias, **styles)
         plotWidget.setBackground("w")
         plotWidget.addLegend()
 
@@ -186,7 +187,7 @@ class AbstractTechnique:
                 continue
             pen = pg.mkPen(color=randomColor(), width=3)
             x, y = self.curves[i]['x'], self.curves[i]['y']
-            plot = plotWidget.plot(x, y, pen=pen, name='segment {}'.format(i))
+            plot = plotWidget.plot(x, y, pen=pen, name='segment {} of {}'.format(i, self.techniqueName))
             plot.setSymbolSize(8)
             plots.append(plot)
         return plotWidget, plots  # 组件和曲线对象
@@ -196,7 +197,7 @@ class AbstractTechnique:
         for plot in self.mainPlots:
             plot.setSymbol('o') if flag else plot.setSymbol(None)
 
-    def wrap(self, x: list, y: list, dataProcName=None, xLabelName=None, yLabelName=None):
+    def wrap(self, data_dict: dict, data_proc_name=None):
         """
         封装一个当前类的深拷贝，并封装新数据。适用于持久化数据处理结果之前的操作
         :return:
@@ -208,24 +209,19 @@ class AbstractTechnique:
         technique = AbstractTechnique(None, None, None, None)
         technique.basicParams = self.basicParams.copy()
         technique.additionalParams = self.additionalParams.copy()
-        technique.analyseParams = self.analyseParams.copy()
 
-        del technique.basicParams['Header']
-        del technique.basicParams['Note']
-        if dataProcName is not None:
-            technique.basicParams['Data Proc'] = dataProcName
-        technique.basicParams['Header'], technique.basicParams['Note'] \
-            = self.basicParams['Header'], self.basicParams['Note']
-
-        labels = list(self.dataDict.keys())
-        xLabelName = labels[0] if xLabelName is None else xLabelName
-        yLabelName = labels[1] if yLabelName is None else yLabelName
-
-        xCarry, yCarry = self.carryDict[xLabelName], self.carryDict[yLabelName]
-        x, y = np.multiply(np.round(x, 3), np.power(10.0, xCarry)), np.multiply(np.round(y, 3), np.power(10.0, yCarry))
-        technique.dataDict = {
-            xLabelName: x, yLabelName: y
-        }
+        if data_proc_name is not None:
+            del technique.basicParams['Header']
+            del technique.basicParams['Note']
+            technique.basicParams['Data Proc'] = data_proc_name
+            technique.basicParams['Header'], technique.basicParams['Note'] \
+                = self.basicParams['Header'], self.basicParams['Note']
+        # 各数据项进位
+        technique.carryDict = self.carryDict.copy()
+        # 各数据项数据处理,加上进位
+        technique.dataDict = {}
+        for label in list(data_dict.keys()):
+            technique.dataDict[label] = data_dict[label]
         return technique
 
     def persist(self, file_path: str):
@@ -240,20 +236,21 @@ class AbstractTechnique:
             v = self.additionalParams[key]
             lines.append("{} = {}\n".format(key, v))
         lines.append('\n')
-        # 分析参数
-        for key in self.analyseParams:
-            v = self.analyseParams[key]
-            lines.append("{} = {}\n".format(key, v))
-        lines.append('\n')
-        # 数据列表项
-        dataLabels = list(self.dataDict.keys())
-        lines.append(', '.join(dataLabels) + '\n')
+        # 数据列表项。在此之前对每一列数据加上进位
+        dataDict = self.dataDict.copy()
+        labels = list(dataDict.keys())
+        for label in labels:
+            carry, data = self.carryDict[label], dataDict[label]
+            # 加上进位，精度控制在三位小数
+            dataDict[label] = np.round(np.round(data, 3) * np.power(10.0, carry), abs(carry) + 3)
+
+        lines.append(', '.join(labels) + '\n')
         lines.append('\n')
         # 数据列
-        for i in range(len(self.dataDict[dataLabels[0]])):
+        for i in range(len(dataDict[labels[0]])):
             item = []
-            for key in self.dataDict.keys():
-                item.append(str(self.dataDict[key][i]))
+            for key in dataDict.keys():
+                item.append(str(dataDict[key][i]))
             lines.append(', '.join(item) + '\n')
         # 写入文件
         f = None
@@ -266,6 +263,20 @@ class AbstractTechnique:
         finally:
             if f:
                 f.close()
+
+    def lossEval(self, technique_name, title=None):
+        """
+        误差评估
+        :param title:
+        :param technique_name:
+        :return: 格式化的误差评估结果
+        """
+        actualName, predictName = list(self.childTechniqueDict.keys())[0], technique_name
+        actualTechnique, predictTechnique = self.childTechniqueDict[actualName], \
+                                            self.childTechniqueDict[predictName]
+        label = self.curYLabel
+        actualY, predictY = actualTechnique.dataDict[label], predictTechnique.dataDict[label]
+        return loss_eval.evaluate(actualY, predictY, actualName, predictName, title)
 
     def smooth(self, window_length, polyorder, name):
         pen = pg.mkPen(width=2, color=randomColor())
@@ -294,29 +305,38 @@ class AbstractTechnique:
 
     def baseline_fit(self, deg, algorithm, difference: bool):
         """
-
+        对全数据项进行拟合，并生成technique对象
         :param deg: 拟合阶数
         :param algorithm: 拟合算法
         :param difference: 显示差值与否
-        :return:拟合后的x,y，返回用于评估误差
+        :return:
         """
-        pen = pg.mkPen(width=2, color=randomColor())
-        curve = self.curves[0]
-        if algorithm == '最小二乘':
-            x, y = dp.lsq_fit(curve['x'], curve['y'], deg)
-        elif algorithm == '正则化最小二乘':
-            x, y = dp.ols_fit(curve['x'], curve['y'], deg)
-        else:
-            raise ValueError("不存在此类拟合算法")
-        Y = y
-        if difference:
-            curveName, y = 'fit subtraction of main curve({} order, {})'.format(deg, algorithm), np.subtract(self.curY,
-                                                                                                             y)
-        else:
-            curveName = "{}({} order) of main curve".format(algorithm, deg)
-        self.plotWidget.plot(x, y, name=curveName, pen=pen)
-        self.childTechniqueDict[curveName] = self.wrap(x, y, 'Baseline Fit')
-        return x, Y
+        # 所有数据项数据处理
+        labels = list(self.dataDict.keys())
+        xLabel, yLabel = self.curXLabel, self.curYLabel  # 当前的x, y对应Label的名称，用于绘制图像
+        x, originY = self.dataDict[xLabel], self.dataDict[yLabel]  # x,y 原始数据序列，因为后边可能会进行绘制差值曲线
+        curY = []
+        dataDict = {xLabel: x}
+        for label in labels:
+            if self.curXLabel == label:
+                continue
+            y = self.dataDict[label]  # 当前数据项对应的y列表
+            x, y = dp.lsq_fit(x, y, deg) if algorithm == '最小二乘' else dp.ols_fit(x, y, deg)  # 正则化最小二乘
+            dataDict[label] = y
+            if label == self.curYLabel:
+                curY = y  # 记录当前y解析后的数据
+
+        # 封装本次数据处理结果
+        techniqueName = "{}({} degree) of main curve".format(algorithm, deg)
+        self.childTechniqueDict[techniqueName] = self.wrap(dataDict, 'Baseline Fit')
+
+        # 绘制当前图像
+        curveName = 'fit subtraction of main curve({} degree, {})' \
+            .format(deg, algorithm) if difference else "{}({} degree) of main curve".format(algorithm, deg)
+        curY = np.subtract(originY, curY) if difference else curY
+        self.plotWidget.plot(x, curY, name=curveName, pen=pg.mkPen(width=2, color=randomColor()))
+
+        return techniqueName, dataDict
 
     def background_subtraction(self, x, y, file_name):
         # todo 校验x和curX是否相同，否 则

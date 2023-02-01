@@ -1,43 +1,25 @@
 import random
+import re
 
 
-def parseAdditionalParamsHelper(lines, start, length):
-    additionalParams = {}
-    for i in range(start, start + length):
-        line = lines[i]
-        if len(line) == 0:
-            continue
-        k, v = line.split("=")[0].strip(), line.split("=")[1].strip()
-        additionalParams[k] = v
-    return additionalParams
-
-
-def defaultAdditionalParamsHelper(lines, start):
+def formatBasicParamsHelper(basic_params: dict, start_index=7):
     """
-    解析直到空行
-    :param lines:
-    :param start:
-    :return: 附加参数字典，labelStartIndex
+
+    :param basic_params:
+    :param start_index: 基本参数的第二部分开始位置
+    :return:
     """
-    # 解析additionalParams
-    additionalParams = {}
-    labelStartIndex = start
-    for i in range(start, len(lines)):
-        line = lines[i]
-        if len(line) == 0:
-            labelStartIndex = i
-            break
-        k, v = line.split("=")[0].strip(), line.split("=")[1].strip()
-        additionalParams[k] = v
-    # 有可能出现的情况是两行空格，需要跳过
-    while len(lines[labelStartIndex]) == 0:
-        labelStartIndex += 1
-    return additionalParams, labelStartIndex
+    basicText = "{}\nTech: {}\nFile: {}\n\n" \
+        .format(basic_params['Date'], basic_params['TechniqueName'], basic_params['File'].split("/")[-1])
+    keys = list(basic_params.keys())
+    for i in range(start_index, len(keys)):
+        key = keys[i]
+        basicText += '{} = {}\n'.format(key, basic_params[key])
+    return basicText
 
 
 def parseBasicParamsHelper(lines: list, file_path: str):
     """
-    数据处理生成的数据文件会在基础参数里多出Data Proc，需要判别一下
     :param lines:
     :param file_path:
     :return: basicParams解析结果，additionalParams开始位置
@@ -46,16 +28,22 @@ def parseBasicParamsHelper(lines: list, file_path: str):
         'Date': lines[0],
         'TechniqueName': lines[1],  # 测试技术名称
         'File': file_path,
-        'DataSource': lines[3].split(":")[1].strip(),
-        'InstrumentModel': lines[4].split(":")[1].strip()
     }
-    key, value = lines[5].split(":")[0], lines[5].split(":")[1]
-    if "Data Proc" in key:
-        basicParams[key] = value.strip()
-        basicParams['Header'], basicParams['Note'] = lines[6].split(":")[1], lines[7].split(":")[1]
-        return basicParams, 9
-    basicParams['Header'], basicParams['Note'] = lines[5].split(":")[1], lines[6].split(":")[1]
-    return basicParams, 8
+    # 解析基础参数
+    start = 3
+    for _ in range(2):
+        for i in range(start, len(lines)):
+            line = lines[i]
+            if len(line) == 0:
+                start = i + 1
+                break
+            if ":" not in line and "=" not in line:  # IMP测试会出现这种情况
+                basicParams[line] = ''
+                continue
+            split = re.split(r'[:=]', line)
+            k, v = split[0].strip(), split[1].strip()
+            basicParams[k] = v
+    return basicParams, start
 
 
 def formatLabel(text, carry):
