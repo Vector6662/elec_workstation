@@ -10,7 +10,7 @@ import techniques.implements
 import techniques.interface
 from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
     InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget, GraphicOptionWidget, \
-    BackgroundSubtractionWidget, PersistCurveWidget
+    BackgroundSubtractionWidget, PersistCurveWidget, FourierSpectrumWidget
 
 
 class MainWindow(QMainWindow):
@@ -23,7 +23,7 @@ class MainWindow(QMainWindow):
         self.technique = None
         self.dataModifyWindow = {}  # 数据点修改子窗口
 
-        self.setWindowTitle("Ch660D电化学工作站")
+        self.setWindowTitle("电化学测试分析软件")
         self.resize(1600, 900)
 
         # 读取并解析配置文件
@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
         lines = file_data.splitlines()
 
         techniqueName = lines[1]
-        # 找不到任何类型用抽象类解析
+        # 找不到任何类型，用抽象类解析
         if techniqueName not in techniques.implements.techniqueDict:
             technique = techniques.interface.AbstractTechnique(self, lines, file_path, file_type)
         else:
@@ -377,7 +377,8 @@ class MainWindow(QMainWindow):
         if self.technique is None or self.centralWidget() is None:
             self.errInfoWidget.showInfo("暂无数据输入!")
             return
-        self.popoutRef = GraphicOptionWidget(self, self.technique.basicParams, self.technique.additionalParams, self.technique.mainPlots)
+        self.popoutRef = GraphicOptionWidget(self, self.technique.basicParams, self.technique.additionalParams,
+                                             self.technique.mainPlots)
         self.popoutRef.show()
 
     def onCurrentDataGraph(self):
@@ -391,7 +392,7 @@ class MainWindow(QMainWindow):
         pass
 
     def onCopyToClipboard(self):
-        pass
+        self.technique.plotGraph()
 
     def onCleanPlot(self):
         if self.technique.plotWidget is None:
@@ -456,7 +457,7 @@ class MainWindow(QMainWindow):
             '数据平滑': SmoothWidget, '导数': DerivativeWidget, '积分': IntegrateWidget,
             '半积分和半微分': None, '插值': InterpolateWidget, '基线拟合和扣除': BaselineFitWidget,
             '线性基线修正': None, '数据点删除': None, '背景扣除': BackgroundSubtractionWidget,
-            '信号平均': None, '数学运算': None, '傅里叶频谱': None,
+            '信号平均': None, '数学运算': None, '傅里叶频谱': FourierSpectrumWidget,
         }
 
     def onDataProcess(self, evt: QAction):

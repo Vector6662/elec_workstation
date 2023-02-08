@@ -8,7 +8,7 @@ class ACV(AbstractTechnique):  # A.C. Voltammetry
         super().__init__(parent, lines, file_name, file_type)
 
     def parseCurrentCurves(self):
-        self.defaultCurveParser(x_key='E', x_unit='V', y_key='i', y_unit='A')
+        self.defaultCurveParser(x_key='E', x_unit='V', y_key='i', y_unit='A', y_label_alias='AC Current/A')
 
     def formatParameterTexts(self):
         basicText = formatBasicParamsHelper(self.basicParams)
@@ -125,12 +125,15 @@ class DPA(AbstractTechnique):  # Differential Pulse Amperometry
 class DPV(AbstractTechnique):  # Differential Pulse Voltammetry
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
+
     def parseCurrentCurves(self):
         self.defaultCurveParser(x_key='E', x_unit='V', y_key='i', y_unit='A')
+
 
 class IMP(AbstractTechnique):  # A.C. Impedance
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
+
     def parseCurrentCurves(self):
         self.defaultCurveParser(cur_x_label="Z'/ohm", cur_y_label='Z\"/ohm',
                                 x_key='E', x_unit='V', y_key='i', y_unit='A')
@@ -139,6 +142,9 @@ class IMP(AbstractTechnique):  # A.C. Impedance
 class IMPE(AbstractTechnique):  # Impedance - Potential
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
+
+    def parseCurrentCurves(self):
+        self.defaultCurveParser(cur_x_label="Potential/V", cur_y_label='Z/ohm', x_key='E', x_unit='V', y_key='y', y_unit='e')
 
 
 class IMPT(AbstractTechnique):  # Impedance - Time

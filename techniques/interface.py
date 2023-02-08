@@ -2,10 +2,12 @@ import math
 import re
 import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
+from pyqtgraph import ScatterPlotItem
 
 import dataprocess.loss_eval as loss_eval
 import techniques.dataprocess as dp
@@ -36,6 +38,9 @@ class AbstractTechnique:
         self.curXCarry, self.curYCarry = None, None
         self.curXLabelAlias, self.curYLabelAlias = None, None  # 别名，用于坐标轴上显示标签
         self.curves = []
+        # 解析出的数据封装成technique对象，用于持久化等操作
+        self.childTechniqueDict = {}
+
         # 坐标实时显示是的信息。如t=1.23s,Q=2.34e-1C
         self.xKey, self.xUnit, self.yKey, self.yUnit = None, None, None, None
 
@@ -48,11 +53,10 @@ class AbstractTechnique:
         # 初始化主界面各个部件
         self.parameterWidget = self.initParameterWidget()
         self.plotWidget, self.mainPlots = self.initPlotWidget()
+
+        # self.mark_peaks()  # 自动峰值检测
         # 展示坐标
         self.positionWidget = QLabel(objectName='Position')
-
-        # 数据处理时产生的曲线，以AbstractTechnique对象存储，方便后续持久化。初始化为类自己
-        self.childTechniqueDict = {self.techniqueName: self}
 
     def parseParams(self) -> int:
         """
@@ -112,8 +116,17 @@ class AbstractTechnique:
                     val = float(s)
                 self.dataDict[label].append(round(val, 4))
 
+        # 加上高斯白噪
+        # i = 0
+        # for label in self.dataDict:
+        #     if i == 0:
+        #         i += 1
+        #         continue
+        #     self.dataDict[label] += dp.wgn(self.dataDict[label], 30)
+
     def parseCurrentCurves(self):
         """
+        确定x、y数据的label，以及坐标显示数据的key和单位
         可重写。部分测试技术坐标轴上显示可能不同显示文字会有不同
         注意，curves[0]必须为所有数据连续的曲线
         :return:
@@ -121,25 +134,25 @@ class AbstractTechnique:
         """
         self.defaultCurveParser()
 
-    def defaultCurveParser(self, cur_x_label=None, cur_y_label=None, x_key='X', x_unit='', y_key='Y', y_unit=''):
+    def defaultCurveParser(self, cur_x_label=None, cur_y_label=None, x_key='X', x_unit='', y_key='Y', y_unit='',
+                           x_label_alias=None, y_label_alias=None):
         """
         提供主曲线默认解析方案
-        :param cur_x_label: 
-        :param cur_y_label: 
-        :param x_key: 
-        :param x_unit: 
-        :param y_key: 
-        :param y_unit: 
         :return: 
         """
+        # 如果没有指定cur_x_label或cur_y_label，默认为第0、1个数据项的label
         self.curXLabel, self.curYLabel = \
             list(self.dataDict.keys())[0] if cur_x_label is None else cur_x_label, \
             list(self.dataDict.keys())[1] if cur_y_label is None else cur_y_label
+
         self.curX, self.curY, self.curXCarry, self.curYCarry, self.curXLabelAlias, self.curYLabelAlias \
-            = parseCurveHelper(self.dataDict, self.carryDict, self.curXLabel, self.curYLabel)
+            = parseCurveHelper(self.dataDict, self.carryDict, self.curXLabel, self.curYLabel, x_label_alias,
+                               y_label_alias)
         self.xKey, self.xUnit, self.yKey, self.yUnit = x_key, x_unit, y_key, y_unit
 
         self.curves.append({'x': self.curX, 'y': self.curY})
+        # 数据处理时产生的曲线，以AbstractTechnique对象存储，方便后续持久化。初始化为类自己
+        self.childTechniqueDict[self.techniqueName] = self
 
     def formatParameterTexts(self):
         """
@@ -197,6 +210,16 @@ class AbstractTechnique:
         for plot in self.mainPlots:
             plot.setSymbol('o') if flag else plot.setSymbol(None)
 
+    def plotGraph(self):
+        import matplotlib.pyplot as plt
+        title, xlabel, ylabel = '', 'Frequency/Hz', 'log(FT Coefficient)'
+        plt.title(title)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        x, y = self.dataDict[self.curXLabel], self.dataDict[self.curYLabel]
+        plt.plot(x, y)
+        plt.show()
+
     def wrap(self, data_dict: dict, data_proc_name=None):
         """
         封装一个当前类的深拷贝，并封装新数据。适用于持久化数据处理结果之前的操作
@@ -214,8 +237,8 @@ class AbstractTechnique:
             del technique.basicParams['Header']
             del technique.basicParams['Note']
             technique.basicParams['Data Proc'] = data_proc_name
-            technique.basicParams['Header'], technique.basicParams['Note'] \
-                = self.basicParams['Header'], self.basicParams['Note']
+            technique.basicParams['Header'], technique.basicParams['Note'] = \
+                self.basicParams['Header'], self.basicParams['Note']
         # 各数据项进位
         technique.carryDict = self.carryDict.copy()
         # 各数据项数据处理,加上进位
@@ -272,23 +295,51 @@ class AbstractTechnique:
         :return: 格式化的误差评估结果
         """
         actualName, predictName = list(self.childTechniqueDict.keys())[0], technique_name
-        actualTechnique, predictTechnique = self.childTechniqueDict[actualName], \
-                                            self.childTechniqueDict[predictName]
+        actualTechnique, predictTechnique = self.childTechniqueDict[actualName], self.childTechniqueDict[predictName]
         label = self.curYLabel
         actualY, predictY = actualTechnique.dataDict[label], predictTechnique.dataDict[label]
         return loss_eval.evaluate(actualY, predictY, actualName, predictName, title)
 
     def smooth(self, window_length, polyorder, name):
-        pen = pg.mkPen(width=2, color=randomColor())
-        curve = self.curves[0]
-        x, y = curve['x'], dp.smooth(curve['x'], curve['y'], window_length, polyorder)
-        self.plotWidget.plot(x, y, name="{} of main curve".format(name), pen=pen)
+        labels = list(self.dataDict.keys())
+        xLabel, yLabel = self.curXLabel, self.curYLabel
+        x, originY = self.dataDict[xLabel], self.dataDict[yLabel]
+        curY = []
+        dataDict = {xLabel: x}
+        for label in labels:
+            if label == xLabel:
+                continue
+            y = dp.smooth(x, self.dataDict[label], window_length, polyorder)
+            dataDict[label] = y
+            if label == yLabel:
+                curY = y
+        techniqueName = 'S-G smooth of main curve(window_length={}, polyorder={})'.format(window_length, polyorder)
+        self.childTechniqueDict[techniqueName] = self.wrap(dataDict, 'Smooth')
+        self.plotWidget.plot(x, curY, name=techniqueName, pen=pg.mkPen(width=2, color=randomColor()))
+        return techniqueName, dataDict
 
-    def n_derivative(self, deg: int):
-        pen = pg.mkPen(width=2, color=randomColor())
-        curve = self.curves[0]
-        x, y = curve['x'], dp.n_derivative(curve['x'], curve['y'], deg)
-        self.plotWidget.plot(x, y, name='{}rd Order Derivative of main curve'.format(deg), pen=pen)
+    def n_derivative(self, deg: int, lsq_points: int):
+        # 首先完成lsq平滑
+        # _, dataDict = self.smooth(lsq_points, 3, '')
+        # dataDict = dataDict.copy()
+
+        dataDict = self.dataDict
+        # 进行n阶导数
+        labels = list(dataDict.keys())
+        xLabel, yLabel = self.curXLabel, self.curYLabel
+        x, originY = dataDict[xLabel], dataDict[yLabel]
+        curY = []
+        for label in labels:
+            if label == xLabel:
+                continue
+            y = dp.n_derivative(x, dataDict[label], deg)
+            dataDict[label] = y
+            if label == yLabel:
+                curY = y
+        techniqueName = '{}th Order Derivative of main curve. lsq points={}'.format(deg, lsq_points)
+        self.childTechniqueDict[techniqueName] = self.wrap(dataDict, "Derivative")
+        self.plotWidget.plot(x, curY, name=techniqueName, pen=pg.mkPen(width=2, color=randomColor()))
+        return techniqueName, dataDict
 
     def integrate(self, name: str):
         pen = pg.mkPen(width=2, color=randomColor(), cosmetic=True)
@@ -303,36 +354,64 @@ class AbstractTechnique:
         x, y = curve['x'], dp.interpolate(curve['x'], curve['y'], density)
         self.plotWidget.plot(x, y, name='B-Spline interpolate of main curve', pen=pen)
 
-    def baseline_fit(self, deg, algorithm, difference: bool):
+    def baseline_fit(self, deg, algorithm, difference: bool, peaks=None, clip_mode='linear'):
         """
         对全数据项进行拟合，并生成technique对象
+        :param clip_mode: 削峰方式，linear，max，min
+        :param peaks:
         :param deg: 拟合阶数
         :param algorithm: 拟合算法
         :param difference: 显示差值与否
         :return:
         """
         # 所有数据项数据处理
-        labels = list(self.dataDict.keys())
+        dataDict = self.dataDict.copy()
+        labels = list(dataDict.keys())
         xLabel, yLabel = self.curXLabel, self.curYLabel  # 当前的x, y对应Label的名称，用于绘制图像
-        x, originY = self.dataDict[xLabel], self.dataDict[yLabel]  # x,y 原始数据序列，因为后边可能会进行绘制差值曲线
-        curY = []
-        dataDict = {xLabel: x}
+        x, originY = dataDict[xLabel], dataDict[yLabel]  # x,y 原始数据序列，因为后边可能会进行绘制差值曲线
+
+        # 峰值扣除
+        for peak in peaks:
+            from_peak, to_peak = peak
+            from_peak, to_peak = from_peak if from_peak < to_peak else to_peak, to_peak if from_peak < to_peak else from_peak
+            fromIndex, toIndex = -1, -1
+            for i in range(len(x)):
+                if from_peak <= x[i] <= to_peak and fromIndex == -1:
+                    fromIndex = i
+                elif from_peak < x[i] < to_peak and fromIndex != -1:
+                    toIndex = i
+            fromY, toY = originY[fromIndex], originY[toIndex]
+            slope = (fromY - toY) / (fromIndex - toIndex)
+            t = np.arange(fromIndex, toIndex, 1)
+            # 三种削峰的方式，一种用直线填补，或者最大值
+            if clip_mode == 'linear':
+                f = slope * (t - fromIndex) + fromY
+            elif clip_mode == 'max':
+                f = [max(fromY, toY) for _ in range(len(t))]
+            else:
+                f = [min(fromY, toY) for _ in range(len(t))]
+            for i in range(len(f)):
+                dataDict[yLabel][i + fromIndex] = f[i]
+        if len(peaks) > 0:
+            self.plotWidget.plot(x, dataDict[yLabel], name='peak clipping',
+                                 pen=pg.mkPen(width=2, color=randomColor()))  # 绘制削峰后曲线
+
+        # 拟合
         for label in labels:
             if self.curXLabel == label:
                 continue
-            y = self.dataDict[label]  # 当前数据项对应的y列表
+            y = dataDict[label]  # 当前数据项对应的y列表
             x, y = dp.lsq_fit(x, y, deg) if algorithm == '最小二乘' else dp.ols_fit(x, y, deg)  # 正则化最小二乘
             dataDict[label] = y
-            if label == self.curYLabel:
-                curY = y  # 记录当前y解析后的数据
 
         # 封装本次数据处理结果
         techniqueName = "{}({} degree) of main curve".format(algorithm, deg)
         self.childTechniqueDict[techniqueName] = self.wrap(dataDict, 'Baseline Fit')
 
         # 绘制当前图像
-        curveName = 'fit subtraction of main curve({} degree, {})' \
-            .format(deg, algorithm) if difference else "{}({} degree) of main curve".format(algorithm, deg)
+        curveName = 'fit subtraction of main curve({} degree, {})'.format(deg,
+                                                                          algorithm) if difference else techniqueName
+        curY = dataDict[yLabel]
         curY = np.subtract(originY, curY) if difference else curY
         self.plotWidget.plot(x, curY, name=curveName, pen=pg.mkPen(width=2, color=randomColor()))
 
@@ -343,3 +422,38 @@ class AbstractTechnique:
         subtract_y = np.subtract(self.curY, y)
         self.plotWidget.plot(self.curX, subtract_y, name='background subtraction with {}'.format(file_name),
                              pen=pg.mkPen(width=2, color=randomColor()))
+
+    def mark_peaks(self):
+        x, y = np.asarray(self.dataDict[self.curXLabel]), np.asarray(self.dataDict[self.curYLabel])
+        px = dp.AMPD(y)
+        scatterPlotItem = ScatterPlotItem(x[px], y[px], symbol='o', pen=pg.mkPen(width=2, color=(255, 0, 0)))
+        self.plotWidget.addItem(scatterPlotItem)
+        # self.plotWidget.plot(x[px], y[px], name='peaks', pen=pg.mkPen(width=2, color=(0, 0, 255)), symbol='o')
+
+    def fft(self, x_scale, y_scale, y_expression):
+        xLabel, yLabel = self.curXLabel, self.curYLabel  # 当前的x, y对应Label的名称，用于绘制图像
+        t, x = np.asarray(self.dataDict[xLabel]), np.asarray(self.dataDict[yLabel])
+        fft_size = t.size
+
+        sampling_rate = int(1 / abs(t[1] - t[0]))
+
+        xs = x[:fft_size]
+        xf = np.fft.fft(xs) / fft_size
+        freqs = np.fft.fftfreq(fft_size, sampling_rate)
+
+        freqs = np.linspace(0, sampling_rate, fft_size)
+        xfp = 20 * np.log10(np.clip(np.abs(xf), 1e-20, 1e100))
+        xfp = np.abs(xf)
+
+        self.plotWidget.setLabel('bottom', 'Frequency/Hz')
+        self.plotWidget.setLabel('left', 'Amplitude')
+
+        self.plotWidget.plot(freqs, xfp, name='fourier spectrum of main curve',
+                             pen=pg.mkPen(width=2, color=randomColor()))
+
+        # 用matlib绘制下
+        plt.title('fourier spectrum of {}'.format(self.techniqueName))
+        plt.xlabel('Frequency/Hz')
+        plt.ylabel('Amplitude')
+        plt.plot(freqs, xfp)
+        plt.show()

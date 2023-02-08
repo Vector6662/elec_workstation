@@ -5,6 +5,7 @@
 import math
 import os
 import random
+import matplotlib.pyplot as plt
 
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -18,7 +19,7 @@ def evaluate(y_actual: list, y_predicted: list, actual_name=None, predict_name=N
     :param actual_name: 实际曲线名称
     :param predict_name: 预测曲线名称
     :param title: 标题，比如基线拟合，插值等
-    :return:
+    :return: text，误差评估格式化后的文本；evalDict，字典格式结果
     """
     y_actual, y_predicted = np.asarray(y_actual), np.asarray(y_predicted)
     mae = mean_absolute_error(y_actual, y_predicted)
@@ -57,16 +58,22 @@ def evaluate(y_actual: list, y_predicted: list, actual_name=None, predict_name=N
     return text, evalDict
 
 
-import matplotlib.pyplot as plt
-
-
 def randColor():
     colors = ['#DC143C', '#DB7093', '#FF1493', '#4B0082', '#0000FF', '#0000FF', '#000080', '#778899', '#4682B4',
               '#00BFFF', '#5F9EA0', '#FFFF00', '#FFA500', '#DEB887', '#FF7F50', '#FF6347']
     return colors[random.randint(0, len(colors) - 1)]
 
 
-def baseline_fit_plot(x, y, title, x_label, y_label):
+def plot_and_save(x, y, title, x_label, y_label):
+    """
+    绘制图像后，保存数据文件
+    :param x:
+    :param y:
+    :param title:
+    :param x_label:
+    :param y_label:
+    :return:
+    """
     plt.plot(x, y, color='#8FBC8F', linestyle='dashed', label='label')
     plt.xlabel(x_label)
     plt.ylabel(y_label)
@@ -84,8 +91,10 @@ def parse():
     解析分析结果文件
     :return:
     """
+    evalName = 'MSE Fit'  # 指标名称
     f = open('../evaluation.txt', mode='r')
     file_data = f.read()
+    f.close()
     lines = file_data.splitlines()
     curves = []
     for line in lines:
@@ -102,9 +111,8 @@ def parse():
 
     plt.xlabel(curves[0]['x_label'])
     plt.ylabel(curves[0]['y_label'])
-    plt.title('MSE for some techniques')
+    plt.title('{} for some techniques'.format(evalName))
     plt.legend()
     plt.show()
 
-
-parse()
+# parse()

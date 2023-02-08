@@ -14,6 +14,10 @@ pyqtgraph使用：https://www.pythonguis.com/tutorials/plotting-pyqtgraph/
 
 
 
+The Event Handling Mechanism：https://www.pythonstudio.us/pyqt-programming/the-eventhandling-mechanism.html
+
+
+
 QApplication：每一个app需且仅需一个
 
 event loop：每一个app只有一个
@@ -57,6 +61,12 @@ event：注意mousemoveevent：
 [python 数据、曲线平滑处理——方法总结(Savitzky-Golay 滤波器、make_interp_spline插值法和convolve滑动平均滤波)](https://blog.csdn.net/weixin_42782150/article/details/107176500)：写了四种平滑的方法
 
 积分、微分：[python 计算离散点的微分和积分(超详细)](https://blog.csdn.net/goodCodeVsBadBs/article/details/108270333)：
+
+### 平滑
+
+https://blog.csdn.net/sinat_39620217/article/details/119645227：里边的描述文字非常好，可以写进论文，比如：
+
+> 使用平滑滤波器对信号滤波时，实际上是拟合了信号中的低频成分，而将高频成分平滑出去了。 如果噪声在高频端，那么滤波的结果就是去除了噪声，反之，若噪声在低频段，那么滤波的结果就是留下了噪声。
 
 
 
@@ -122,9 +132,25 @@ https://towardsdatascience.com/b%C3%A9zier-interpolation-8033e9a262c2详细推�
 
 分数阶累加的python实现：https://blog.csdn.net/cauchy7203/article/details/107093205/
 
-
+API：https://github.com/differint/differint/wiki/Main-Functions
 
 ### 傅里叶
+
+公式及推导：https://iphysresearch.github.io/blog/post/signal_processing/fft/
+
+傅里叶变换的**频域滤波**：https://blog.csdn.net/sunxmwebstudy/article/details/112762625。比较原理性的，应该对频谱图的平滑、卷积等操作都可以用来滤波。
+
+卷积：https://blog.csdn.net/myangel13141/article/details/115708370，https://blog.csdn.net/whjkm/article/details/81949356
+
+
+
+窗函数：[链接](https://blog.hszofficial.site/TutorialForPython/%E7%A7%91%E5%AD%A6%E8%AE%A1%E7%AE%97%E7%AF%87/%E4%BD%BF%E7%94%A8python%E5%81%9A%E8%AE%A1%E7%AE%97/%E6%95%B0%E5%80%BC%E8%AE%A1%E7%AE%97/%E4%BD%BF%E7%94%A8numpy_scipy%E5%A4%84%E7%90%86%E5%A4%8D%E6%9D%82%E7%9A%84%E6%95%B0%E5%80%BC%E8%AE%A1%E7%AE%97%E9%97%AE%E9%A2%98/%E7%AA%97%E5%8F%A3%E5%87%BD%E6%95%B0%E4%B8%8E%E5%8D%B7%E7%A7%AF/%E7%AA%97%E5%8F%A3%E5%87%BD%E6%95%B0%E4%B8%8E%E5%8D%B7%E7%A7%AF.html)。
+
+窗函数理解：https://blog.csdn.net/zhaomengszu/article/details/72627750
+
+窗函数公式：https://blog.csdn.net/qq_44628230/article/details/107003226
+
+
 
 傅里叶频谱分析：https://blog.csdn.net/qq_39720178/article/details/124502403
 
@@ -134,11 +160,19 @@ https://blog.csdn.net/sunxmwebstudy/article/details/112762625 实现功能不少
 
 
 
+卷积结论证明：[链接](https://aiart.live/courses/%E6%95%B0%E5%AD%97%E5%9B%BE%E5%83%8F%E5%A4%84%E7%90%86/2022/DIP-2-05%E9%A2%91%E5%9F%9F%E6%BB%A4%E6%B3%A2-1D%E5%82%85%E9%87%8C%E5%8F%B6%E5%8F%98%E6%8D%A2.pdf)、[如何理解卷积与傅里叶变换的关系？ - 囧程程的回答 - 知乎](https://www.zhihu.com/question/340004682/answer/2004144581) 。
+
+
+
+FFT如何做到nlogn的，详细推导：https://blog.csdn.net/qq_43409114/article/details/104870977
+
+
+
 ### 误差指标
 
 https://cloud.tencent.com/developer/article/2028633
 
-
+公式参考：https://blog.csdn.net/weixin_39541558/article/details/80705006
 
 
 
@@ -161,7 +195,9 @@ aurora原始配置
 \providecommand{\norm}[1]{\left\lVert#1\right\rVert}
 ```
 
+## MatPlotLib作图参考文档
 
+https://www.runoob.com/matplotlib/matplotlib-line.html
 
 # 论文内容备忘录
 

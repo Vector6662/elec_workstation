@@ -137,24 +137,40 @@ class DerivativeWidget(QWidget):
         super().__init__()
         self.parent = parent
         self.setWindowTitle('导数')
-        self.currentIndex = 0
-        self.listWidget = QListWidget()
+
+        self.currentIndex = 0  # 阶数
+        self.lsqPoints = 7  # 最小二乘点数
+
+        listWidget = QListWidget()
         items = []
         for i in range(1, 5):
             items.append('{}rd Order Derivative'.format(i))
+        listWidget.addItems(items)
+        listWidget.currentTextChanged.connect(self.onTextChanged)
 
-        self.listWidget.addItems(items)
-        self.listWidget.currentTextChanged.connect(self.onTextChanged)
+        lsqLabel = QLabel('最小二乘点数：')
+
+        lsqBox = QComboBox()  # 最小二乘拟合点数选择
+        lsqBox.addItems([str(i) for i in range(5, 50) if i % 2 != 0])
+        lsqBox.currentTextChanged.connect(self.onLsqChanged)
+        lsqBox.setCurrentText('7')
+
         button = QPushButton('确认')
         button.clicked.connect(self.onClick)
+
         layout = QHBoxLayout()
-        layout.addWidget(self.listWidget)
+        layout.addWidget(listWidget)
+        layout.addWidget(lsqLabel)
+        layout.addWidget(lsqBox)
         layout.addWidget(button)
         self.setLayout(layout)
 
     def onClick(self):
-        self.parent.technique.n_derivative(deg=self.currentIndex)
+        self.parent.technique.n_derivative(self.currentIndex, self.lsqPoints)
         self.close()
+
+    def onLsqChanged(self, s):
+        self.lsqPoints = int(s)
 
     def onTextChanged(self, s):
         self.currentIndex = int(s[0])
@@ -167,6 +183,7 @@ class SmoothWidget(QWidget):
         self.points = 5  # 平滑窗口数
         self.polyorder = 3  # 阶数
         self.choose = 'S-G平滑'  # 平滑方式选择
+        self.showLossEval = False
 
         self.parent = parent
         self.setWindowTitle('平滑')
@@ -189,6 +206,14 @@ class SmoothWidget(QWidget):
         button = QPushButton('确认')
         button.clicked.connect(self.onClick)
 
+        evalAllBtn = QPushButton('整体平滑效果')
+        evalAllBtn.clicked.connect(self.onEvalAll)
+
+        # 误差评估
+        lossEvalBox = QCheckBox('拟合评估结果')
+        self.showLossEval = False
+        lossEvalBox.stateChanged.connect(self.onLossEvalState)
+
         layout.addWidget(chooseLabel, 0, 0)
         layout.addWidget(chooseList, 0, 1)
         layout.addWidget(pointsLabel, 1, 0)
@@ -196,18 +221,43 @@ class SmoothWidget(QWidget):
         layout.addWidget(polyorderLabel, 2, 0)
         layout.addWidget(polyorderBox, 2, 1)
         layout.addWidget(button, 3, 0)
+        layout.addWidget(evalAllBtn, 3, 1)
+        layout.addWidget(lossEvalBox, 4, 0)
 
         self.setLayout(layout)
 
     def onClick(self):
-        # print('points', self.points, 'way', self.choose)
+        self.close()
         if self.points <= self.polyorder:
             self.parent.errInfoWidget.showInfo(
                 'polyorder({}) must be less than window_length({})!'.format(self.points, self.polyorder))
             return
+        techniqueName, dataDict = self.parent.technique.smooth(self.points, self.polyorder, self.choose)
+        if self.showLossEval:
+            evalResult, _ = self.parent.technique.lossEval(techniqueName,
+                                                           'Savitzky-Golay smooth. points={}, polyorder={}'.format(
+                                                               self.points, self.polyorder))
+            self.parent.popoutRef = LossReportWidget(evalResult)
+            self.parent.popoutRef.show()
 
-        self.parent.technique.smooth(self.points, self.polyorder, self.choose)
+    def onEvalAll(self):
         self.close()
+        technique = self.parent.technique
+        title, xLabel, yLabel = '{} S-G Smooth'.format(technique.techniqueName), 'points', 'R-Square'
+        points, polyorder = [5, 9, 15, 21, 27, 33, 41, 49], 3
+        x, y = [], []
+        for point in points:
+            techniqueName, dataDict = technique.smooth(point, polyorder, '')
+            _, evalDict = technique.lossEval(techniqueName,
+                                             '() Savitzky-Golay smooth. points={}, polyorder={}'.format(
+                                                 technique.techniqueName, point, polyorder))
+            x.append(point)
+            y.append(evalDict['R2'])
+
+        loss_eval.plot_and_save(x, y, title, xLabel, yLabel)
+
+    def onLossEvalState(self, state):
+        self.showLossEval = state == Qt.Checked
 
     def onChoose(self, s):
         # 平滑方法选择
@@ -300,17 +350,20 @@ class BaselineFitWidget(QWidget):
         self.setWindowTitle("基线拟合与扣除")
         self.confirm = '无操作'  # 确认时操作
         self.parent = parent
+
+        self.fromPeak, self.toPeak = 0, 0
+        self.peaks = []
+        self.clipMode = 'linear'
+
         mainLayout = QGridLayout()
 
         # 峰底两侧 子layout
         mainLayout.addWidget(QLabel("峰底两侧", objectName='Title1'), 0, 0)
+        mainLayout.addWidget(self.addPeakWidget(), 1, 0)
         peaksWidget = QWidget()
         self.peaksLayout = QVBoxLayout()
         peaksWidget.setLayout(self.peaksLayout)
-        self.peakWidgetList = []  # 添加的peakWidget
-        self.peakWidgetList.append(self.addPeakWidget(0))
-        self.peaksLayout.addWidget(self.peakWidgetList[0])
-        mainLayout.addWidget(peaksWidget, 1, 0)
+        mainLayout.addWidget(peaksWidget, 2, 0)
 
         # 基线拟合算法 子layout
         mainLayout.addWidget(QLabel('基线拟合算法', objectName='Title1'), 3, 0)
@@ -318,16 +371,24 @@ class BaselineFitWidget(QWidget):
         fitWidget = QWidget()
         fitLayout = QGridLayout()
         fitWidget.setLayout(fitLayout)
+        # 选择拟合算法
         fitLayout.addWidget(QLabel('算法选择: '), 0, 0)
-        algWidget = QComboBox()  # 选择拟合算法
+        algWidget = QComboBox()
         algWidget.currentTextChanged.connect(self.onAlgChoose)
         algWidget.addItems(['最小二乘', '正则化最小二乘'])
         fitLayout.addWidget(algWidget, 0, 1)
+        # 基线拟合项次 选择
         fitLayout.addWidget(QLabel('基线拟合项次'), 1, 0)
-        degWidget = QComboBox()  # 基线拟合项次 选择
+        degWidget = QComboBox()
         degWidget.addItems([str(i) for i in range(1, 15)])
         degWidget.currentTextChanged.connect(self.onDegChoose)
         fitLayout.addWidget(degWidget, 1, 1)
+        # 削峰方式
+        fitLayout.addWidget(QLabel('削峰方式'), 2, 0)
+        clipBox = QComboBox()
+        clipBox.addItems(['linear', 'max', 'min'])
+        clipBox.currentTextChanged.connect(self.onClip)
+        fitLayout.addWidget(clipBox, 2, 1)
         mainLayout.addWidget(fitWidget, 4, 0)
 
         # 确认时操作
@@ -369,26 +430,25 @@ class BaselineFitWidget(QWidget):
         title = '{} baseline fit (1-14 degree)'.format(technique.techniqueName)
         x, y = [], []
         for deg in range(1, 15):
-            techniqueName, dataDict = technique.baseline_fit(deg, '最小二乘', False)
+            techniqueName, dataDict = technique.baseline_fit(deg, '最小二乘', False, self.peaks, self.clipMode)
             evalResult, evalDict = technique.lossEval(techniqueName, '{} baseline fit({} degree)'.format(technique.techniqueName, deg))
             x.append(deg)
             y.append(evalDict[key])
-        loss_eval.baseline_fit_plot(x, y, title, xLabel, yLabel)
+        loss_eval.plot_and_save(x, y, title, xLabel, yLabel)
 
     def onClick(self):
-        techniqueName, dataDict = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值')
+        techniqueName, dataDict = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值', self.peaks, self.clipMode)
 
-        self.close()
+        self.hide()
         if self.showLossEval:
             evalResult, _ = self.parent.technique.lossEval(techniqueName, '{} baseline fit({} degree)'.format(
                 self.parent.technique.techniqueName, self.deg))
             self.parent.popoutRef = LossReportWidget(evalResult)
             self.parent.popoutRef.show()
 
-    def addPeakWidget(self, number: int):
+    def addPeakWidget(self):
         # 产生峰值范围选择的widget, number为编号
         widget = QWidget(self)
-        widget.setStatusTip(str(number))
         layout = QHBoxLayout()
         layout.addWidget(QLabel('from'))
         fromEdit = QLineEdit()
@@ -397,12 +457,28 @@ class BaselineFitWidget(QWidget):
         toEdit = QLineEdit()
         layout.addWidget(toEdit)
         widget.setLayout(layout)
+
+        fromEdit.textChanged.connect(self.onFromPeak)
+        toEdit.textChanged.connect(self.onToPeak)
         return widget
 
     def onAddPeak(self):
-        widget = self.addPeakWidget(len(self.peakWidgetList))
-        self.peakWidgetList.append(widget)
-        self.peaksLayout.addWidget(widget)
+        if self.fromPeak-self.toPeak == 0:
+            return
+        label = QLabel('Peak{}: from {} to {}'.format(len(self.peaks), self.fromPeak, self.toPeak))
+        self.peaksLayout.addWidget(label)
+        self.peaks.append((self.fromPeak, self.toPeak))
+
+    def onFromPeak(self, s):
+        if len(s) == 1 and s == '-': return
+        self.fromPeak = float(s) if len(s) != 0 else 0
+
+    def onToPeak(self, s):
+        if len(s) == 1 and s == '-': return
+        self.toPeak = float(s) if len(s) != 0 else 0
+
+    def onClip(self, s):
+        self.clipMode = s
 
     def onLossEvalState(self, state):
         self.showLossEval = state == Qt.Checked
@@ -417,6 +493,63 @@ class BaselineFitWidget(QWidget):
 
     def onConfirm(self, s):
         self.confirm = s
+
+
+class FourierSpectrumWidget(QWidget):
+    """
+    傅里叶频谱
+    """
+
+    def __init__(self, parent):
+        super(FourierSpectrumWidget, self).__init__()
+        self.setWindowTitle('fourier spectrum')
+        self.parent = parent
+        self.xScale, self.yScale, self.yExpres = '1/sec(Hz)', 'linear', 'magnitude'
+
+        mainLayout = QGridLayout()
+
+        xScaleLabel = QLabel("X Scale")
+        mainLayout.addWidget(xScaleLabel, 0, 0)
+
+        xScaleList = QListWidget()
+        xScaleList.addItems(['nth component', '1/sec(Hz)', '1/V'])
+        xScaleList.currentTextChanged.connect(self.onXScaleList)
+        mainLayout.addWidget(xScaleList, 1, 0)
+
+        yScaleLabel = QLabel('Y Scale')
+        mainLayout.addWidget(yScaleLabel, 0, 1)
+
+        yScaleList = QListWidget()
+        yScaleList.addItems(['linear', 'logrithmic'])
+        yScaleList.currentTextChanged.connect(self.onYScaleList)
+        mainLayout.addWidget(yScaleList, 1, 1)
+
+        yExpreLabel = QLabel('Y Expression')
+        mainLayout.addWidget(yExpreLabel, 2, 0)
+
+        yExpreList = QListWidget()
+        yExpreList.addItems(['magnitude', 'real', 'imag'])
+        yExpreList.currentTextChanged.connect(self.onYExpreList)
+        mainLayout.addWidget(yExpreList, 3, 0)
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClick)
+        mainLayout.addWidget(button, 0, 3)
+
+        self.setLayout(mainLayout)
+
+    def onClick(self):
+        self.parent.technique.fft(self.xScale, self.yScale, self.yExpres)
+        self.close()
+
+    def onXScaleList(self, s):
+        self.xScale = s
+
+    def onYScaleList(self, s):
+        self.yScale = s
+
+    def onYExpreList(self, s):
+        self.yExpres = s
 
 
 class BackgroundSubtractionWidget(QWidget):
