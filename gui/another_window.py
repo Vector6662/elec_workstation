@@ -11,6 +11,7 @@ from threading import Timer
 
 import dataprocess.loss_eval as loss_eval
 from techniques.interface import AbstractTechnique
+from uitls import randomColor
 
 
 class DataModifyWindow(QWidget):
@@ -82,7 +83,7 @@ class DataModifyWindow(QWidget):
         if self.plotDataItem is not None:
             # plotDataItem对象存在，不论有没有修改text，都重新绘制
             self.parent.technique.plotWidget.removeItem(self.plotDataItem)
-        pen = pg.mkPen(color=(255, 0, 0), width=30)
+        pen = pg.mkPen(color=randomColor(), width=30)
         self.plotDataItem = self.parent.technique.plotWidget.plot(x, y, pen=pen, name=self.text)
         self.plotDataItem.setSymbol('x')
         self.plotDataItem.setSymbolSize(15)
@@ -243,8 +244,9 @@ class SmoothWidget(QWidget):
     def onEvalAll(self):
         self.close()
         technique = self.parent.technique
-        title, xLabel, yLabel = '{} S-G Smooth'.format(technique.techniqueName), 'points', 'R-Square'
-        points, polyorder = [5, 9, 15, 21, 27, 33, 41, 49], 3
+        points, polyorder = [9, 15, 21, 27, 33, 41, 49], 6
+        title, xLabel, yLabel = '{} S-G Smooth(polyorder={})'.format(technique.techniqueName,
+                                                                     polyorder), 'points', 'R-Square'
         x, y = [], []
         for point in points:
             techniqueName, dataDict = technique.smooth(point, polyorder, '')
@@ -253,7 +255,6 @@ class SmoothWidget(QWidget):
                                                  technique.techniqueName, point, polyorder))
             x.append(point)
             y.append(evalDict['R2'])
-
         loss_eval.plot_and_save(x, y, title, xLabel, yLabel)
 
     def onLossEvalState(self, state):
@@ -278,9 +279,6 @@ class IntegrateWidget(QWidget):
 
     def __init__(self, parent):
         super(IntegrateWidget, self).__init__()
-        self.nameDict = {
-            '复合梯形': 'trapezoid', '复合辛普森': 'simpson'
-        }
         self.parent = parent
         self.setWindowTitle('积分')
         self.name = 'trapezoid'  # 积分方式，默认复合梯形
@@ -289,7 +287,7 @@ class IntegrateWidget(QWidget):
 
         chooseLabel = QLabel('积分规则选择')
         chooseList = QListWidget()
-        chooseList.addItems(['复合梯形', '复合辛普森'])
+        chooseList.addItems(['trapezoid', 'simpson', 'simpson3/8'])
         chooseList.currentTextChanged.connect(self.onChoose)
 
         button = QPushButton('确认')
@@ -300,11 +298,14 @@ class IntegrateWidget(QWidget):
         layout.addWidget(button)
 
     def onClick(self):
-        self.parent.technique.integrate(self.nameDict[self.name])
+        # 记录数据处理时间
+        t = time.perf_counter()
+        self.parent.technique.integrate(self.name)
+        print(f'integrate({self.name}) coast:{time.perf_counter() - t:.8f}s')
+
         self.close()
 
     def onChoose(self, s: str):
-        # print('integrate name:', s)
         self.name = s
 
 
@@ -431,13 +432,15 @@ class BaselineFitWidget(QWidget):
         x, y = [], []
         for deg in range(1, 15):
             techniqueName, dataDict = technique.baseline_fit(deg, '最小二乘', False, self.peaks, self.clipMode)
-            evalResult, evalDict = technique.lossEval(techniqueName, '{} baseline fit({} degree)'.format(technique.techniqueName, deg))
+            evalResult, evalDict = technique.lossEval(techniqueName,
+                                                      '{} baseline fit({} degree)'.format(technique.techniqueName, deg))
             x.append(deg)
             y.append(evalDict[key])
         loss_eval.plot_and_save(x, y, title, xLabel, yLabel)
 
     def onClick(self):
-        techniqueName, dataDict = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值', self.peaks, self.clipMode)
+        techniqueName, dataDict = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值',
+                                                                     self.peaks, self.clipMode)
 
         self.hide()
         if self.showLossEval:
@@ -463,19 +466,23 @@ class BaselineFitWidget(QWidget):
         return widget
 
     def onAddPeak(self):
-        if self.fromPeak-self.toPeak == 0:
+        if self.fromPeak - self.toPeak == 0:
             return
         label = QLabel('Peak{}: from {} to {}'.format(len(self.peaks), self.fromPeak, self.toPeak))
         self.peaksLayout.addWidget(label)
         self.peaks.append((self.fromPeak, self.toPeak))
 
     def onFromPeak(self, s):
-        if len(s) == 1 and s == '-': return
-        self.fromPeak = float(s) if len(s) != 0 else 0
+        try:
+            self.fromPeak = float(s)
+        except:
+            return
 
     def onToPeak(self, s):
-        if len(s) == 1 and s == '-': return
-        self.toPeak = float(s) if len(s) != 0 else 0
+        try:
+            self.toPeak = float(s)
+        except:
+            return
 
     def onClip(self, s):
         self.clipMode = s
@@ -512,7 +519,7 @@ class FourierSpectrumWidget(QWidget):
         mainLayout.addWidget(xScaleLabel, 0, 0)
 
         xScaleList = QListWidget()
-        xScaleList.addItems(['nth component', '1/sec(Hz)', '1/V'])
+        xScaleList.addItems(['nth component', '1/sec(Hz)', '1/V'])  # nth是正的，后边的是负的？
         xScaleList.currentTextChanged.connect(self.onXScaleList)
         mainLayout.addWidget(xScaleList, 1, 0)
 
@@ -520,7 +527,7 @@ class FourierSpectrumWidget(QWidget):
         mainLayout.addWidget(yScaleLabel, 0, 1)
 
         yScaleList = QListWidget()
-        yScaleList.addItems(['linear', 'logrithmic'])
+        yScaleList.addItems(['linear', 'logarithmic'])  # db化
         yScaleList.currentTextChanged.connect(self.onYScaleList)
         mainLayout.addWidget(yScaleList, 1, 1)
 
@@ -528,7 +535,7 @@ class FourierSpectrumWidget(QWidget):
         mainLayout.addWidget(yExpreLabel, 2, 0)
 
         yExpreList = QListWidget()
-        yExpreList.addItems(['magnitude', 'real', 'imag'])
+        yExpreList.addItems(['magnitude', 'real', 'imag'])  #幅度图像 实部图像 虚部
         yExpreList.currentTextChanged.connect(self.onYExpreList)
         mainLayout.addWidget(yExpreList, 3, 0)
 
@@ -564,6 +571,7 @@ class BackgroundSubtractionWidget(QWidget):
         self.file_path, self.file_type = None, None
 
         self.showLossEval = False  # 是否显示误差评估结果
+        self.showBkgrd = False  # 时候显示背景曲线
 
         mainLayout = QGridLayout()
         openFileBtn = QPushButton('选择文件')
@@ -577,15 +585,22 @@ class BackgroundSubtractionWidget(QWidget):
         showLossEvalBox = QCheckBox('误差评估')
         showLossEvalBox.stateChanged.connect(self.onCheck)
 
+        showBkgrdCurve = QCheckBox('显示背景曲线')
+        showBkgrdCurve.stateChanged.connect(self.onShowbkgrd)
+
         mainLayout.addWidget(openFileBtn, 0, 0)
         mainLayout.addWidget(button, 0, 1)
         mainLayout.addWidget(self.pathLabel, 1, 0)
         mainLayout.addWidget(showLossEvalBox, 2, 0)
+        mainLayout.addWidget(showBkgrdCurve, 3, 0)
 
         self.setLayout(mainLayout)
 
     def onCheck(self, state):
         self.showLossEval = state
+
+    def onShowbkgrd(self, state):
+        self.showBkgrd = state == Qt.Checked
 
     def onOpenFile(self):
         self.file_path, self.file_type = QFileDialog.getOpenFileName(self, "选取目录", "./", "Files (*.txt *.bin)")
@@ -600,11 +615,53 @@ class BackgroundSubtractionWidget(QWidget):
         technique, file_data = self.parent.parseFile(self.file_path, self.file_type)
         x, y = technique.curX, technique.curY
         file_name = technique.file_name.split("/")[-1]
-        self.parent.technique.background_subtraction(x, y, file_name)
+        self.parent.technique.background_subtraction(technique, file_name, self.showBkgrd)
         if self.showLossEval == Qt.Checked:
-            self.parent.popoutRef = LossReportWidget(loss_eval.evaluate(self.parent.technique.curY, y))
+            text, _ = loss_eval.evaluate(self.parent.technique.curY, y)
+            self.parent.popoutRef = LossReportWidget(text)
             self.parent.popoutRef.show()
         self.close()
+
+
+class SignalAvgWidget(QWidget):
+    def __init__(self, parent):
+        super(SignalAvgWidget, self).__init__()
+        self.setWindowTitle('信号平均')
+        self.parent = parent
+        self.file_paths = []  # 进行信号平均的文件名列表
+        mainLayout = QGridLayout()
+
+        openFileBtn = QPushButton('选择文件')
+        openFileBtn.clicked.connect(self.onOpenFile)
+
+        self.pathsLabel = QLabel()
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClick)
+
+        mainLayout.addWidget(openFileBtn, 0, 0)
+        mainLayout.addWidget(self.pathsLabel, 1, 0)
+        mainLayout.addWidget(button, 0, 1)
+
+        self.setLayout(mainLayout)
+
+    def onClick(self):
+        self.close()
+        if len(self.file_paths) == 0:
+            self.parent.errInfoWidget.showInfo('尚未选择文件')
+            return
+        techniques = []
+        for file_path in self.file_paths:
+            technique, file_data = self.parent.parseFile(file_path, 'txt')
+            techniques.append(technique)
+        self.parent.technique.signal_average(techniques)
+
+    def onOpenFile(self):
+        file_path, file_type = QFileDialog.getOpenFileName(self, "选取目录", "./", "Files (*.txt *.bin)")
+        if file_path is None or len(file_path) == 0:
+            warnings.warn('error on open file.')
+        self.file_paths.append(file_path)
+        self.pathsLabel.setText('\n'.join(self.file_paths))
 
 
 class LossReportWidget(QWidget):
@@ -811,7 +868,7 @@ class PersistCurveWidget(QWidget):
         self.techniqueDict = self.parent.technique.childTechniqueDict
         mainLayout = QGridLayout()
 
-        infoLabel = QLabel('曲线选择')
+        infoLabel = QLabel('选择曲线')
 
         curveBox = QComboBox()
         self.curveName = ''

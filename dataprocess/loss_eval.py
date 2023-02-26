@@ -91,7 +91,7 @@ def parse():
     解析分析结果文件
     :return:
     """
-    evalName = 'MSE Fit'  # 指标名称
+    evalName = 'R-Square'  # 指标名称
     f = open('../evaluation.txt', mode='r')
     file_data = f.read()
     f.close()
@@ -111,8 +111,9 @@ def parse():
 
     plt.xlabel(curves[0]['x_label'])
     plt.ylabel(curves[0]['y_label'])
-    plt.title('{} for some techniques'.format(evalName))
+    plt.title('{} for techniques(polyorder=6)'.format(evalName))
     plt.legend()
     plt.show()
+
 
 # parse()

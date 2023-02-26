@@ -1,3 +1,4 @@
+import time
 import warnings
 
 from PyQt5.QtGui import QIcon
@@ -10,7 +11,7 @@ import techniques.implements
 import techniques.interface
 from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
     InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget, GraphicOptionWidget, \
-    BackgroundSubtractionWidget, PersistCurveWidget, FourierSpectrumWidget
+    BackgroundSubtractionWidget, PersistCurveWidget, FourierSpectrumWidget, SignalAvgWidget
 
 
 class MainWindow(QMainWindow):
@@ -111,6 +112,7 @@ class MainWindow(QMainWindow):
             'action_tiling_plotting': ['', '平铺作图', 'tiling plotting', False, self.onTilingPlotting],
             'action_copy_to_clipboard': ['', '复制到剪切板', 'copy to clipboard', False, self.onCopyToClipboard],
             'action_clear_plot': ['', '清空图像', 'clean plot', False, self.onCleanPlot],
+            'action_peak_detect': ['', '峰值检测', 'peak detection', True, self.onPeakDetect],
 
             'action_data_list': ['', '数据列表', 'data lists', False, self.onDataList],
             'action_data_info': ['', '数据信息', 'data information', False, self.onDataInfo],
@@ -171,6 +173,7 @@ class MainWindow(QMainWindow):
         graphic_menu.addSeparator()
         graphic_menu.addAction(self.actions['action_clear_plot'])
         graphic_menu.addAction(self.actions['action_show_points'])
+        graphic_menu.addAction(self.actions['action_peak_detect'])
         graphic_menu.addSeparator()
         graphic_menu.addAction(self.actions['action_graphic_option'])
         graphic_menu.addSeparator()
@@ -294,6 +297,7 @@ class MainWindow(QMainWindow):
         self.errInfoWidget.showInfo("can not open com port!")
 
     def onOpenRecentFile(self, evt):
+        # 打开文件方式一，打开最近文件
         # todo file_menu下所有的action都绑定了此handler，只有最近打开文件才会执行
         #  最近打开文件路径的最前边都有一个编号，如"1 C:/acv1.txt"，只有这种格式的才会执行以下解析，否则会return。
         #  也就是说，file_memu下边action除了最近打开文件，都有执行两个handler，目前来看不是一种优雅的实现方式
@@ -304,6 +308,7 @@ class MainWindow(QMainWindow):
         self.generateMainWidget(path, file_type)
 
     def onOpenfile(self):
+        # 打开文件方式二，访问文件系统并打开文件
         file_path, file_type = QFileDialog.getOpenFileName(self, "选取数据文件", "./", "Files (*.txt *.bin)")
         if file_path is None or len(file_path) == 0:
             warnings.warn('error on open file.')
@@ -335,11 +340,12 @@ class MainWindow(QMainWindow):
         lines = file_data.splitlines()
 
         techniqueName = lines[1]
+        # 记录解析时间
+        t = time.perf_counter()
         # 找不到任何类型，用抽象类解析
-        if techniqueName not in techniques.implements.techniqueDict:
-            technique = techniques.interface.AbstractTechnique(self, lines, file_path, file_type)
-        else:
-            technique = techniques.implements.techniqueDict[techniqueName](self, lines, file_path, file_type)
+        technique = techniques.interface.AbstractTechnique(self, lines, file_path, file_type) if techniqueName not in techniques.implements.techniqueDict else techniques.implements.techniqueDict[techniqueName](self, lines, file_path, file_type)
+        print(f'parse({techniqueName}) coast:{time.perf_counter() - t:.8f}s')
+
         return technique, file_data
 
     def generateMainWidget(self, file_path, file_type):
@@ -385,6 +391,9 @@ class MainWindow(QMainWindow):
         for plot in self.technique.mainPlots:
             self.technique.plotWidget.addItem(plot)  # 这里应该不需要判断item已经存在，因为addItem源码最开始就会帮忙判断，若有则抛出waring并返回，我这里就偷下懒不判断了
 
+    def onPeakDetect(self, state):
+        self.technique.peak_detect(state)
+
     def onOverlayPlotting(self):
         pass
 
@@ -392,7 +401,7 @@ class MainWindow(QMainWindow):
         pass
 
     def onCopyToClipboard(self):
-        self.technique.plotGraph()
+        self.technique.plot_graph()
 
     def onCleanPlot(self):
         if self.technique.plotWidget is None:
@@ -457,7 +466,7 @@ class MainWindow(QMainWindow):
             '数据平滑': SmoothWidget, '导数': DerivativeWidget, '积分': IntegrateWidget,
             '半积分和半微分': None, '插值': InterpolateWidget, '基线拟合和扣除': BaselineFitWidget,
             '线性基线修正': None, '数据点删除': None, '背景扣除': BackgroundSubtractionWidget,
-            '信号平均': None, '数学运算': None, '傅里叶频谱': FourierSpectrumWidget,
+            '信号平均': SignalAvgWidget, '数学运算': None, '傅里叶频谱': FourierSpectrumWidget,
         }
 
     def onDataProcess(self, evt: QAction):

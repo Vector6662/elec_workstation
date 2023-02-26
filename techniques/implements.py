@@ -33,6 +33,9 @@ class BEL(AbstractTechnique):  # Bulk Electrolysis with Coulometry
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
 
+    def parseCurrentCurves(self):
+        self.defaultCurveParser(x_key='t', x_unit='s', y_key='Q', y_unit='C')
+
 
 class CC(AbstractTechnique):  # Chronocoulometry
     def __init__(self, parent, lines, file_name, file_type):
@@ -65,7 +68,7 @@ class CC(AbstractTechnique):  # Chronocoulometry
         return basicText, additionalText
 
     def parseCurrentCurves(self):
-        self.defaultCurveParser(x_key='E', x_unit='V', y_key='i', y_unit='A')
+        self.defaultCurveParser(x_key='t', x_unit='s', y_key='Q', y_unit='C')
         end, pre = 0, self.curX[0]
         for i in range(1, len(self.curX)):
             y = self.curY[i]
@@ -78,9 +81,42 @@ class CC(AbstractTechnique):  # Chronocoulometry
         self.curves.append({'x': self.curX[end:], 'y': self.curY[end:]})
 
 
+class CA(AbstractTechnique):
+    def __init__(self, parent, lines, file_name, file_type):
+        super().__init__(parent, lines, file_name, file_type)
+
+    def parseParams(self) -> int:
+        self.basicParams, start = parseBasicParamsHelper(self.lines, self.file_name)
+        self.additionalParams = {
+            'F_Slp': self.lines[19].split("=")[1],
+            'F_Int': self.lines[20].split("=")[1],
+            'F_Cor': self.lines[21].split("=")[1],
+            'R_Slp': self.lines[24].split("=")[1],
+            'R_Int': self.lines[25].split("=")[1],
+            'R_Cor': self.lines[26].split("=")[1],
+        }
+        return 28
+
+    def formatParameterTexts(self):
+        return CC.formatParameterTexts(self)
+
+    def parseCurrentCurves(self):
+        self.defaultCurveParser(x_key='t', x_unit='s', y_key='i', y_unit='A')
+        end, val = 0, self.curY[0]
+        for i in range(1, len(self.curX)):
+            if val > self.curY[i]:
+                end, val = i, self.curY[i]
+        # 其他片段
+        self.curves.append({'x': self.curX[0:end], 'y': self.curY[0:end]})
+        self.curves.append({'x': self.curX[end:], 'y': self.curY[end:]})
+
+
 class CP(AbstractTechnique):  # Chronopotentiometry
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
+
+    def parseCurrentCurves(self):
+        self.defaultCurveParser(x_key='t', x_unit='s', y_key='E', y_unit='V')
 
 
 class CV(AbstractTechnique):  # Cyclic Voltammetry
@@ -144,7 +180,8 @@ class IMPE(AbstractTechnique):  # Impedance - Potential
         super().__init__(parent, lines, file_name, file_type)
 
     def parseCurrentCurves(self):
-        self.defaultCurveParser(cur_x_label="Potential/V", cur_y_label='Z/ohm', x_key='E', x_unit='V', y_key='y', y_unit='e')
+        self.defaultCurveParser(cur_x_label="Potential/V", cur_y_label='Z/ohm', x_key='E', x_unit='V', y_key='y',
+                                y_unit='e')
 
 
 class IMPT(AbstractTechnique):  # Impedance - Time
@@ -160,6 +197,9 @@ class IT(AbstractTechnique):  # Amperometric i-t Curve
 class LSV(AbstractTechnique):  # Linear Sweep Voltammetry
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
+
+    def parseCurrentCurves(self):
+        self.defaultCurveParser(x_key='E', x_unit='V', y_key='i', y_unit='A')
 
 
 class NPV(AbstractTechnique):  # Normal Pulse Voltammetry
@@ -201,6 +241,7 @@ def initTech():
     return {
         'A.C. Voltammetry': ACV,
         'Bulk Electrolysis with Coulometry': BEL,
+        'Chronoamperometry': CA,
         'Chronocoulometry': CC,
         'Chronopotentiometry': CP,
         'Cyclic Voltammetry': CV,

@@ -68,6 +68,8 @@ https://blog.csdn.net/sinat_39620217/article/details/119645227：里边的描述
 
 > 使用平滑滤波器对信号滤波时，实际上是拟合了信号中的低频成分，而将高频成分平滑出去了。 如果噪声在高频端，那么滤波的结果就是去除了噪声，反之，若噪声在低频段，那么滤波的结果就是留下了噪声。
 
+最详细：https://blog.csdn.net/weixin_45929124/article/details/123601803
+
 
 
 ### 微分和积分
@@ -80,7 +82,7 @@ https://blog.csdn.net/zhuoqingjoking97298/article/details/107351185，实现的�
 
 [纯Python实现：函数求导切线图、求偏导、梯度下降法（4）](https://blog.csdn.net/QLBFA/article/details/107558464)：自行实现求偏导的算法，mark一下， 论文中可以写
 
-
+龙贝格求积分优化：https://blog.csdn.net/qq_34777600/article/details/79502867
 
 ### 贝塞尔曲线
 
@@ -89,12 +91,6 @@ Savitzky-Golay 滤波器：
 https://www.cnblogs.com/xiaofengzai/p/15961937.html、https://blog.csdn.net/sinat_21258931/article/details/79298478
 
 b-spline：b样条基函数，用来实现插值。[深入理解贝塞尔曲线](https://juejin.cn/post/6844903666361565191)
-
-http://t.csdn.cn/ta8su：这个最详细！
-
-
-
-
 
 
 
@@ -173,6 +169,10 @@ FFT如何做到nlogn的，详细推导：https://blog.csdn.net/qq_43409114/artic
 https://cloud.tencent.com/developer/article/2028633
 
 公式参考：https://blog.csdn.net/weixin_39541558/article/details/80705006
+
+### 自动峰检测
+
+https://zhuanlan.zhihu.com/p/549588865
 
 
 
