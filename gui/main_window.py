@@ -11,7 +11,7 @@ import techniques.implements
 import techniques.interface
 from gui.another_window import DataModifyWindow, ErrorInfoWidget, DerivativeWidget, SmoothWidget, IntegrateWidget, \
     InterpolateWidget, BaselineFitWidget, DataListWidget, DataInfoWidget, ClockWidget, GraphicOptionWidget, \
-    BackgroundSubtractionWidget, PersistCurveWidget, FourierSpectrumWidget, SignalAvgWidget
+    BackgroundSubtractionWidget, PersistCurveWidget, FourierSpectrumWidget, SignalAvgWidget, FFTFilterWidget
 
 
 class MainWindow(QMainWindow):
@@ -98,12 +98,13 @@ class MainWindow(QMainWindow):
             'action_dp_interpolate': ['', '插值', 'Interpolation', False, None],  # 插值
             'action_dp_baseline_fitting': ['', '基线拟合和扣除', 'Baseline Fitting & Subtraction', False, None],
             'action_dp_baseline_correction': ['', '线性基线修正', 'Linear Baseline Correction', False, None],  # 线性基线修正
+            'action_dp_fourier_spectrum': ['', '傅里叶频谱', 'Fourier Spectrum', False, None],  # 傅里叶频谱
+            'action_dp_fft_filter': ['', '傅里叶滤波', 'FFT Filter', False, None],  # 快速傅里叶变换滤波
             'action_dp_datapoint_remove': ['', '数据点移除', 'Data Point Removing', False, None],  # 数据点移除
             'action_dp_datapoint_modify': ['', '数据点修改', 'Data Point Modifying', False, None],  # 数据点修改
             'action_dp_backgroud_substract': ['', '背景扣除', 'Background Subtraction', False, None],  # 背景扣除
             'action_dp_signal_avg': ['', '信号平均', 'Signal Averaging', False, None],  # 信号平均
             'action_dp_math_ops': ['', '数学运算', 'Mathematical Operation', False, None],  # 数学运算
-            'action_dp_fourier_spectrum': ['', '傅里叶频谱', 'Fourier Spectrum', False, None],  # 傅里叶频谱
 
             'action_show_points': ['', '显示数据点', 'show points', True, self.onShowPoints],
             'action_graphic_option': ['', '图形选项', 'graphic options', False, self.onGraphicOption],
@@ -343,7 +344,9 @@ class MainWindow(QMainWindow):
         # 记录解析时间
         t = time.perf_counter()
         # 找不到任何类型，用抽象类解析
-        technique = techniques.interface.AbstractTechnique(self, lines, file_path, file_type) if techniqueName not in techniques.implements.techniqueDict else techniques.implements.techniqueDict[techniqueName](self, lines, file_path, file_type)
+        technique = techniques.interface.AbstractTechnique(self, lines, file_path,
+                                                           file_type) if techniqueName not in techniques.implements.techniqueDict else \
+        techniques.implements.techniqueDict[techniqueName](self, lines, file_path, file_type)
         print(f'parse({techniqueName}) coast:{time.perf_counter() - t:.8f}s')
 
         return technique, file_data
@@ -467,6 +470,7 @@ class MainWindow(QMainWindow):
             '半积分和半微分': None, '插值': InterpolateWidget, '基线拟合和扣除': BaselineFitWidget,
             '线性基线修正': None, '数据点删除': None, '背景扣除': BackgroundSubtractionWidget,
             '信号平均': SignalAvgWidget, '数学运算': None, '傅里叶频谱': FourierSpectrumWidget,
+            '傅里叶滤波': FFTFilterWidget,
         }
 
     def onDataProcess(self, evt: QAction):

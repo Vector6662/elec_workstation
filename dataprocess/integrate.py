@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 
 
 def trapezoid(y, x):
@@ -47,3 +48,19 @@ def integrate_cumulative(y, x, name='trapezoid'):
     for i in range(len(y)):
         integrals.append(f(y[:i + 1], x[:i + 1]))
     return np.abs(integrals)
+
+
+def scipy_intergrate_cumulative(y, x, name='trapezoid'):
+    '''
+    :param name:
+    :param x:
+    :param y:
+    :return:
+    '''
+    integrals = []
+    for i in range(len(y)):  # 计算梯形的面积，由于是累加，所以是切片"i+1"
+        item = scipy.integrate.simpson(y[:i + 1], x[:i + 1]) if name == 'simpson' \
+            else scipy.integrate.trapz(y[:i + 1], x[:i + 1])
+        integrals.append(item)
+
+    return integrals

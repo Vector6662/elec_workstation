@@ -1,5 +1,15 @@
 import random
 import re
+import numpy as np
+
+
+# 高斯白噪，参考：https://blog.csdn.net/weixin_56243568/article/details/127577328
+def wgn(x, snr):
+    x = np.asarray(x)
+    snr = 10 ** (snr / 10.0)
+    xpower = np.sum(x ** 2) / len(x)
+    npower = xpower / snr
+    return np.random.randn(len(x)) * np.sqrt(npower)
 
 
 def formatBasicParamsHelper(basic_params: dict, start_index=7):

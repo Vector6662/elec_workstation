@@ -58,7 +58,7 @@ Step Smpl Int (s) = 0.004
 Quiet Time (sec) = 5
 Sensitivity (A/V) = 1e-5
 
-Potential/V, i/A__or__Time/sec, i/A
+Potential/V, i/A
 
 4.990e-1, -8.954e-7
 4.980e-1, -8.497e-7

@@ -139,7 +139,7 @@ class DerivativeWidget(QWidget):
         self.parent = parent
         self.setWindowTitle('导数')
 
-        self.currentIndex = 0  # 阶数
+        self.order = 0  # 阶数
         self.lsqPoints = 7  # 最小二乘点数
 
         listWidget = QListWidget()
@@ -167,14 +167,72 @@ class DerivativeWidget(QWidget):
         self.setLayout(layout)
 
     def onClick(self):
-        self.parent.technique.n_derivative(self.currentIndex, self.lsqPoints)
+        t = time.perf_counter()
+        self.parent.technique.n_derivative(self.order, self.lsqPoints)
+        print(f'derivative(order{self.order}) coast:{time.perf_counter() - t:.8f}s')
         self.close()
 
     def onLsqChanged(self, s):
         self.lsqPoints = int(s)
 
     def onTextChanged(self, s):
-        self.currentIndex = int(s[0])
+        self.order = int(s[0])
+
+
+class FFTFilterWidget(QWidget):
+    def __init__(self, parent):
+        super(FFTFilterWidget, self).__init__()
+        self.parent = parent
+        self.setWindowTitle('傅里叶滤波')
+        self.mode = 'low pass'
+        self.cutoff = ""
+        layout = QGridLayout()
+
+        filterModeLabel = QLabel('滤波器')
+        layout.addWidget(filterModeLabel, 0, 0)
+        filterModeCombox = QComboBox()
+        filterModeCombox.addItems(['low pass', 'high pass', 'band pass'])
+        filterModeCombox.currentTextChanged.connect(self.onChooseMode)
+        layout.addWidget(filterModeCombox, 1, 0)
+
+        cutoffLabel = QLabel('傅里叶截断点数:')
+        layout.addWidget(cutoffLabel, 2, 0)
+
+        cutoffEdit = QLineEdit('0')
+        cutoffEdit.textChanged.connect(self.onCutoff)
+        layout.addWidget(cutoffEdit, 2, 1)
+
+        button = QPushButton('确认')
+        button.clicked.connect(self.onClicked)
+        layout.addWidget(button, 2, 0)
+
+        self.setLayout(layout)
+
+    def onChooseMode(self, mode):
+        self.mode = mode
+
+    def onCutoff(self, text):
+        self.cutoff = text
+
+    def onClicked(self):
+        self.close()
+        t = time.perf_counter()
+        if self.mode == 'band pass':
+            cutoffs = self.cutoff.split(",")
+            try:
+                wn = (float(cutoffs[0]), float(cutoffs[1]))
+            except:
+                self.parent.errInfoWidget.showInfo('带通滤波参数格式错误，提示：0.2,0.1')
+                return
+            self.parent.technique.fft_cutoff(wn, self.mode)
+        else:
+            try:
+                wn = float(self.cutoff)
+            except:
+                self.parent.errInfoWidget.showInfo('高通/低通参数测试错误')
+                return
+            self.parent.technique.fft_cutoff(wn, self.mode)
+        print(f'fft filter({self.mode}) coast:{time.perf_counter() - t:.8f}s')
 
 
 class SmoothWidget(QWidget):
@@ -231,9 +289,11 @@ class SmoothWidget(QWidget):
         self.close()
         if self.points <= self.polyorder:
             self.parent.errInfoWidget.showInfo(
-                'polyorder({}) must be less than window_length({})!'.format(self.points, self.polyorder))
+                'polyorder({}) must be less than window_length({})!'.format(self.polyorder, self.points))
             return
+        t = time.perf_counter()
         techniqueName, dataDict = self.parent.technique.smooth(self.points, self.polyorder, self.choose)
+        print(f'smooth({self.choose}) coast:{time.perf_counter() - t:.8f}s')
         if self.showLossEval:
             evalResult, _ = self.parent.technique.lossEval(techniqueName,
                                                            'Savitzky-Golay smooth. points={}, polyorder={}'.format(
@@ -335,7 +395,9 @@ class InterpolateWidget(QWidget):
         self.setLayout(layout)
 
     def onClick(self):
+        t = time.perf_counter()
         self.parent.technique.interpolate(self.density)
+        print(f'interpolate(x{self.density}) coast:{time.perf_counter() - t:.8f}s')
         self.close()
 
     def onChoose(self, s):
@@ -430,17 +492,21 @@ class BaselineFitWidget(QWidget):
         key, xLabel, yLabel = 'MSE', 'Degree of Polynomial', 'Mean Squared Error'
         title = '{} baseline fit (1-14 degree)'.format(technique.techniqueName)
         x, y = [], []
+        t = time.perf_counter()
         for deg in range(1, 15):
             techniqueName, dataDict = technique.baseline_fit(deg, '最小二乘', False, self.peaks, self.clipMode)
             evalResult, evalDict = technique.lossEval(techniqueName,
                                                       '{} baseline fit({} degree)'.format(technique.techniqueName, deg))
             x.append(deg)
             y.append(evalDict[key])
+        print(f'baseline fit(1-14 deg) coast:{time.perf_counter() - t:.8f}s')
         loss_eval.plot_and_save(x, y, title, xLabel, yLabel)
 
     def onClick(self):
+        t = time.perf_counter()
         techniqueName, dataDict = self.parent.technique.baseline_fit(self.deg, self.algorithm, self.confirm == '差值',
                                                                      self.peaks, self.clipMode)
+        print(f'baseline fit({self.algorithm}) coast:{time.perf_counter() - t:.8f}s')
 
         self.hide()
         if self.showLossEval:
@@ -535,7 +601,7 @@ class FourierSpectrumWidget(QWidget):
         mainLayout.addWidget(yExpreLabel, 2, 0)
 
         yExpreList = QListWidget()
-        yExpreList.addItems(['magnitude', 'real', 'imag'])  #幅度图像 实部图像 虚部
+        yExpreList.addItems(['magnitude', 'real', 'imag'])  # 幅度图像 实部图像 虚部
         yExpreList.currentTextChanged.connect(self.onYExpreList)
         mainLayout.addWidget(yExpreList, 3, 0)
 
@@ -546,8 +612,10 @@ class FourierSpectrumWidget(QWidget):
         self.setLayout(mainLayout)
 
     def onClick(self):
-        self.parent.technique.fft(self.xScale, self.yScale, self.yExpres)
         self.close()
+        t = time.perf_counter()
+        self.parent.technique.fft(self.xScale, self.yScale, self.yExpres)
+        print(f'smooth({self.a}) coast:{time.perf_counter() - t:.8f}s')
 
     def onXScaleList(self, s):
         self.xScale = s

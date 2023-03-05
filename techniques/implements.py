@@ -226,6 +226,17 @@ class SSF(AbstractTechnique):  # Sweep-Step Functions
     def __init__(self, parent, lines, file_name, file_type):
         super().__init__(parent, lines, file_name, file_type)
 
+    def parseParams(self) -> int:
+        self.basicParams, start = parseBasicParamsHelper(self.lines, self.file_name)
+        # 解析附加参数
+        self.additionalParams = {}
+        for i in range(55, 59):
+            line = self.lines[i]
+            split = line.split('=')
+            k, v = split[0].strip(), split[1].strip()
+            self.additionalParams[k] = v
+        return 60
+
 
 class SWV(AbstractTechnique):  # Square Wave Voltammetry
     def __init__(self, parent, lines, file_name, file_type):

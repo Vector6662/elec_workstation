@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
 
 
 # find the a & b points
@@ -58,6 +59,24 @@ def interpolate(x: list, y: list, n: int):
     points = np.asarray(points)
     path = evaluate_bezier(points, n)
     return path[:, 0], path[:, 1]
+
+
+def scipy_interpolate(x: list, y: list, density: int):
+    '''
+    scipy对插值的实现
+    :param x:
+    :param y:
+    :param density:
+    :return:
+    '''
+    # density:设置插入密度
+    # 采用的是b - spline样条函数
+    # 报错：ValueError: Expect x to be a 1-D sorted array_like. 解决方案是是，x数据得递增排列
+    # todo 有些数据本身就是递增的
+    # x, y = x[::-1], y[::-1]
+    x_interp = np.linspace(min(x), max(x), len(x) * density)
+    y_interp = scipy.interpolate.make_interp_spline(x, y)(x_interp)
+    return x_interp, y_interp
 
 
 def test():

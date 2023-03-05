@@ -57,9 +57,13 @@ def lsq_fit(x, y, deg: int):
     :param deg: 阶数
     :return:
     """
-    param = np.polyfit(x, y, deg)
-    f = np.poly1d(param)
-    return x, f(x)
+    # param = np.polyfit(x, y, deg)
+    # f = np.poly1d(param)
+    # return x, f(x)
+
+    x, y = np.array(x), np.array(y)
+    W = np.linalg.inv(x.T.dot(x)+np.exp(-8) * np.eye(deg+1)).dot(x.T).dot(y)
+    return x, x.dot(W)
 
 
 def ols_fit(x, y, deg: int):
