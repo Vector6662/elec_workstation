@@ -12,6 +12,7 @@ from threading import Timer
 import dataprocess.loss_eval as loss_eval
 from techniques.interface import AbstractTechnique
 from uitls import randomColor
+import numpy as np
 
 
 class DataModifyWindow(QWidget):

@@ -12,6 +12,7 @@ from pyqtgraph import ScatterPlotItem
 
 import dataprocess.loss_eval as loss_eval
 import techniques.dataprocess as dp
+import uitls
 from uitls import randomColor, parseBasicParamsHelper, parseCurveHelper, formatBasicParamsHelper
 
 
@@ -128,12 +129,12 @@ class AbstractTechnique:
                 self.dataDict[label].append(val)
 
         # 加上高斯白噪
-        # i = 0
-        # for label in self.dataDict:
-        #     if i == 0:
-        #         i += 1
-        #         continue
-        #     self.dataDict[label] += dp.wgn(self.dataDict[label], 30)
+        i = 0
+        for label in self.dataDict:
+            if i == 0:
+                i += 1
+                continue
+            self.dataDict[label] += uitls.wgn(self.dataDict[label], 30)
 
     def parseCurrentCurves(self):
         """
@@ -173,7 +174,8 @@ class AbstractTechnique:
         basicText = formatBasicParamsHelper(self.basicParams)
         additionalText = ""
         for key in self.additionalParams:
-            additionalText += "{} = {}\n".format(key, self.additionalParams[key]) if len(self.additionalParams[key]) != 0 else '{}\n'.format(key)
+            additionalText += "{} = {}\n".format(key, self.additionalParams[key]) if len(
+                self.additionalParams[key]) != 0 else '{}\n'.format(key)
         return basicText, additionalText
 
     def initParameterWidget(self) -> QWidget:
@@ -312,6 +314,7 @@ class AbstractTechnique:
         return loss_eval.evaluate(actualY, predictY, actualName, predictName, title)
 
     def smooth(self, window_length, polyorder, name):
+        import dataprocess.smooth as smooth
         dataDict = self.dataDict.copy()
         labels = list(self.dataDict.keys())
         xLabel, yLabel = self.curXLabel, self.curYLabel
@@ -319,7 +322,8 @@ class AbstractTechnique:
         for label in labels:
             if label == xLabel:
                 continue
-            y = dp.smooth(x, dataDict[label], window_length, polyorder)
+            y = smooth.filter(x, dataDict[label], window_length, polyorder)
+            # y = smooth.scipy_filter(x, dataDict[label], window_length, polyorder)
             dataDict[label] = y
         techniqueName = 'S-G smooth of main curve(window_length={}, polyorder={})'.format(window_length, polyorder)
         self.childTechniqueDict[techniqueName] = self.wrap(dataDict, 'Smooth')
@@ -330,7 +334,7 @@ class AbstractTechnique:
         # 首先完成lsq平滑
         # _, dataDict = self.smooth(lsq_points, 3, '')
         # dataDict = dataDict.copy()
-
+        import dataprocess.derivative as derivative
         dataDict = self.dataDict.copy()
         # 进行n阶导数
         labels = list(dataDict.keys())
@@ -339,7 +343,7 @@ class AbstractTechnique:
         for label in labels:
             if label == xLabel:
                 continue
-            y = dp.n_derivative(x, dataDict[label], deg)
+            y = derivative.n_derivative(x, dataDict[label], deg)
             dataDict[label] = y
         techniqueName = '{}th Order Derivative of main curve. lsq points={}'.format(deg, lsq_points)
         self.childTechniqueDict[techniqueName] = self.wrap(dataDict, "Derivative")
@@ -356,6 +360,7 @@ class AbstractTechnique:
             if label == xLabel:
                 continue
             y = integrate.integrate_cumulative(dataDict[label], x, name)
+            # y = integrate.scipy_intergrate_cumulative(dataDict[label], x, name)
             dataDict[label] = y
         curY = dataDict[yLabel]
         techniqueName = 'integrate({}) of main curve'.format(name)
@@ -373,6 +378,7 @@ class AbstractTechnique:
             if label == xLabel:
                 continue
             x, y = bezier.interpolate(originX, dataDict[label], density)
+            # x, y = bezier.scipy_interpolate(originX, dataDict[label], density)  # scipy对插值的实现
             dataDict[label] = y
         dataDict[xLabel] = x
         y = dataDict[yLabel]
@@ -436,11 +442,13 @@ class AbstractTechnique:
                                  pen=pg.mkPen(width=2, color=randomColor()))
 
         # 拟合
+        import dataprocess.baseline_fit as baseline_fit
         for label in labels:
             if self.curXLabel == label:
                 continue
             y = dataDict[label]  # 当前数据项对应的y列表
-            x, y = dp.lsq_fit(x, y, deg) if algorithm == '最小二乘' else dp.ols_fit(x, y, deg)  # 正则化最小二乘
+            x, y = baseline_fit.fit(x, y, deg)
+            # x, y = baseline_fit.numpy_fit(x, y, deg)
             dataDict[label] = y
 
         # 封装本次数据处理结果
@@ -478,9 +486,10 @@ class AbstractTechnique:
                              pen=pg.mkPen(width=2, color=randomColor()))
 
     def peak_detect(self, state):
+        import dataprocess.ampd as ampd
         if self.peak_indices is None:
             x, y = np.asarray(self.dataDict[self.curXLabel]), np.asarray(self.dataDict[self.curYLabel])
-            self.peak_indices = dp.AMPD(y)
+            self.peak_indices = ampd.AMPD(y)
             self.peaksScatterItem = ScatterPlotItem(x[self.peak_indices], y[self.peak_indices], symbol='o',
                                                     pen=pg.mkPen(width=2, color=(255, 0, 0)))
             self.plotWidget.addItem(self.peaksScatterItem)
@@ -504,9 +513,9 @@ class AbstractTechnique:
         x_abs = np.abs(xf)  # 幅度
         x_real = np.real(xf)  # 实部
         x_imag = np.imag(xf)  # 虚部
-        normalized_xf = x_abs/fft_size  # 归一化
-        half_t = t[range(fft_size//2)]
-        half_normalized_xf = normalized_xf[range(fft_size//2)]
+        normalized_xf = x_abs / fft_size  # 归一化
+        half_t = t[range(fft_size // 2)]
+        half_normalized_xf = normalized_xf[range(fft_size // 2)]
         # xfp = 20 * np.log10(np.clip(np.abs(xf), 1e-20, 1e100))
         log_xf = 20 * np.log10(x_abs)  # dB功率谱
 
@@ -532,5 +541,39 @@ class AbstractTechnique:
         self.plotWidget.setLabel('bottom', bottom)
         self.plotWidget.setLabel('left', left)
         self.plotWidget.clear()
-        self.plotWidget.plot(freqs, xfp/fft_size, name='fourier spectrum of main curve',
+        self.plotWidget.plot(freqs, xfp / fft_size, name='fourier spectrum of main curve',
                              pen=pg.mkPen(width=2, color=randomColor()))
+
+    def fft_cutoff(self, cutoff, mode='low pass'):
+        xLabel, yLabel = self.curXLabel, self.curYLabel
+        t, x = np.asarray(self.dataDict[xLabel]), np.asarray(self.dataDict[yLabel])
+        fft_size = t.size
+        sampling_rate = int(1 / abs(t[1] - t[0]))
+        freqs = np.linspace(0, sampling_rate, fft_size)
+        xs = x[:fft_size]
+        xf = np.fft.fft(xs)
+        pows = np.abs(xf)
+
+        if mode == 'low pass':
+            noised_indices = np.where(freqs > cutoff * sampling_rate)
+        elif mode == 'high pass':
+            noised_indices = np.where(freqs < cutoff * sampling_rate)
+        else:  # band pass
+            noised_indices = np.where((cutoff[0] * sampling_rate < freqs) & (freqs < cutoff[1] * sampling_rate))
+        xf[noised_indices] = 0
+        filter_x = np.fft.ifft(xf).real
+        self.plotWidget.plot(t, filter_x, name='{} filter (cutoff={}) of main curve'.format(mode, cutoff),
+                             pen=pg.mkPen(width=2, color=randomColor()))
+
+        plt.subplot(2, 1, 1)
+        plt.xlabel('freq')
+        plt.ylabel('pows')
+        plt.title('{}(cutoff={})'.format(mode, cutoff))
+        plt.plot(freqs, abs(xf))
+
+        plt.subplot(2, 1, 2)
+        plt.xlabel('freq')
+        plt.ylabel('pows')
+        plt.title('origin fourier spectrum')
+        plt.plot(freqs, pows, color='g')
+        plt.show()

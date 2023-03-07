@@ -11,6 +11,7 @@ def wgn(x, snr):
     npower = xpower / snr
     return np.random.randn(len(x)) * np.sqrt(npower)
 
+
 # 峰值标记，参考：https://zhuanlan.zhihu.com/p/549588865
 def AMPD(data):
     """
@@ -35,6 +36,8 @@ def AMPD(data):
             if data[i] > data[i - k] and data[i] > data[i + k]:
                 p_data[i] += 1
     return np.where(p_data == max_window_length)[0]
+
+
 # 平滑
 def smooth(x, y, window_length=7, polyorder=3):
     """
@@ -62,7 +65,7 @@ def lsq_fit(x, y, deg: int):
     # return x, f(x)
 
     x, y = np.array(x), np.array(y)
-    W = np.linalg.inv(x.T.dot(x)+np.exp(-8) * np.eye(deg+1)).dot(x.T).dot(y)
+    W = np.linalg.inv(x.T.dot(x) + np.exp(-8) * np.eye(deg + 1)).dot(x.T).dot(y)
     return x, x.dot(W)
 
 

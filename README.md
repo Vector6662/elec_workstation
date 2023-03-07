@@ -195,6 +195,12 @@ aurora原始配置
 \providecommand{\norm}[1]{\left\lVert#1\right\rVert}
 ```
 
+### Algorithm2e
+
+教程：https://zhuanlan.zhihu.com/p/166418214
+
+官方文档：https://mlg.ulb.ac.be/files/algorithm2e.pdf
+
 ## MatPlotLib作图参考文档
 
 https://www.runoob.com/matplotlib/matplotlib-line.html
